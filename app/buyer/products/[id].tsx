@@ -35,9 +35,18 @@ import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 import { addToCart } from "@/src/services/cartService";
 import {
   getProductById,
+  getBatchesByProduct,
   getReviewsByProduct,
 } from "@/src/services/productService";
-import { ProductType, ProductVariation, ReviewType } from "@/src/types/product";
+import { ProductType, BatchType, ReviewType } from "@/src/types/product";
+import {
+  getEggVariantOptions,
+  eggVariantToBaseQuantity,
+  baseStockToVariantStock,
+  formatTrayStock,
+  isEggProduct,
+  type EggVariant,
+} from "@/src/constants/productCatalog";
 
 const DARK_GREEN = "#14532d";
 const DESCRIPTION_PREVIEW_LENGTH = 180;
@@ -49,14 +58,16 @@ export default function ProductDetails() {
   const insets = useSafeAreaInsets();
 
   const [product, setProduct] = useState<ProductType | null>(null);
+  const [batches, setBatches] = useState<BatchType[]>([]);
   const [reviews, setReviews] = useState<ReviewType[]>([]);
   const [loading, setLoading] = useState(true);
   const [buyerId, setBuyerId] = useState("");
   const [buyerName, setBuyerName] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [selectedVariationId, setSelectedVariationId] = useState("");
   const [modalVisible, setModalVisible] = useState(false);
   const [modalMode, setModalMode] = useState<"cart" | "buynow">("cart");
+  // Egg half/full tray choice (buyer side). Default = farmer's base unit.
+  const [eggVariant, setEggVariant] = useState<EggVariant | null>(null);
   const [farmerProfileImage, setFarmerProfileImage] = useState("");
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -92,15 +103,12 @@ export default function ProductDetails() {
       setProduct(data);
 
       if (data) {
-        const [reviewData, farmerDoc] = await Promise.all([
+        const [batchData, reviewData, farmerDoc] = await Promise.all([
+          getBatchesByProduct(data.docId),
           getReviewsByProduct(data.docId),
           getDoc(doc(db, "users", data.farmerId)),
         ]);
-        const initialVariation =
-          data.variations.find(
-            (variation) => variation.stock > 0 && variation.status === "Available"
-          ) || data.variations[0];
-        setSelectedVariationId(initialVariation?.id || "");
+        setBatches(batchData);
 
         // Older reviews may use different identity/image field names. Resolve
         // their avatar from the matching user document as a display fallback.
@@ -184,53 +192,94 @@ export default function ProductDetails() {
     void loadUser();
   }, [loadProduct, loadUser]);
 
-  const variations = product?.variations || [];
-  const selectedVariation: ProductVariation | null =
-    variations.find((variation) => variation.id === selectedVariationId) ||
-    variations[0] ||
-    null;
-  const availableVariations = variations.filter(
-    (variation) => variation.status === "Available" && variation.stock > 0
-  );
-  const totalAvailableStock = availableVariations.reduce(
-    (sum, variation) => sum + variation.stock,
-    0
-  );
-  const prices = (availableVariations.length ? availableVariations : variations).map(
-    (variation) => variation.price
-  );
-  const minPrice = prices.length
-    ? Math.min(...prices)
-    : 0;
-  const maxPrice = prices.length
-    ? Math.max(...prices)
-    : 0;
-  const unitPrice = selectedVariation?.price || 0;
-  const variantMaxStock = Math.floor(
-    selectedVariation && selectedVariation.status === "Available"
-      ? selectedVariation.stock
-      : 0
+  // The batches that still have stock and are marked Available, oldest batch
+  // number first. This is exactly the order recordSale() uses at checkout.
+  const sellableBatches = useMemo(
+    () =>
+      batches
+        .filter((b) => b.stock > 0 && b.status === "Available")
+        .sort((a, b) => a.batchNumber - b.batchNumber),
+    [batches]
   );
 
-  const [reviewFilter, setReviewFilter] = useState<string | "all">("all");
-  const reviewedVariationIds = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          reviews
-            .map((review) => review.variationId)
-            .filter((variationId): variationId is string => Boolean(variationId))
-        )
-      ),
-    [reviews]
+  // The oldest sellable batch is the one that sells first, so its price and its
+  // freshness are what the buyer sees.
+  const currentBatch = sellableBatches[0] || null;
+
+  // The amount the buyer may really order is the stock of every sellable batch,
+  // not only the stock of currentBatch, because recordSale() moves on to the
+  // next batch as soon as the first one runs out. Limiting the plus button to
+  // currentBatch.stock would stop the buyer from ordering more even when the
+  // batches together hold enough.
+  const totalAvailableStock = useMemo(
+    () => sellableBatches.reduce((sum, b) => sum + b.stock, 0),
+    [sellableBatches]
   );
-  const filteredReviews = useMemo(
+
+  // Eggs give the buyer a choice of Half Tray (15 pcs) or Full Tray (30 pcs),
+  // whatever unit the farmer listed. The price of each size is worked out from
+  // the base price.
+  const isEgg = product ? isEggProduct(product.name) : false;
+
+  const eggOptions = useMemo(
     () =>
-      reviewFilter === "all"
-        ? reviews
-        : reviews.filter((review) => review.variationId === reviewFilter),
-    [reviews, reviewFilter]
+      isEgg && product && currentBatch
+        ? getEggVariantOptions(product.unit, currentBatch.price)
+        : [],
+    [isEgg, product, currentBatch]
   );
+
+  const activeEggOption = useMemo(() => {
+    if (eggOptions.length === 0) return null;
+    return (
+      eggOptions.find((o) => o.variant === eggVariant) ?? eggOptions[0] ?? null
+    );
+  }, [eggOptions, eggVariant]);
+
+  // The price shown and charged, which is the tray price for eggs.
+  const unitPrice = activeEggOption
+    ? activeEggOption.price
+    : (currentBatch?.price ?? 0);
+
+  // How much can be bought in the chosen tray size, converted from the base
+  // stock.
+  const variantMaxStock = useMemo(() => {
+    if (!product || !currentBatch) return 0;
+    if (!activeEggOption) return Math.floor(totalAvailableStock);
+    return baseStockToVariantStock(
+      totalAvailableStock,
+      product.unit,
+      activeEggOption.variant
+    );
+  }, [product, currentBatch, activeEggOption, totalAvailableStock]);
+
+  // The chosen amount expressed in the farmer's unit, which is what the stock
+  // deduction uses.
+  const baseQuantityForStock = useMemo(() => {
+    if (!product || !activeEggOption) return quantity;
+    return eggVariantToBaseQuantity(
+      activeEggOption.variant,
+      quantity,
+      product.unit
+    );
+  }, [product, activeEggOption, quantity]);
+
+  // Review filter, either every review of the product or only one batch. "all"
+  // shows everything, while picking a batch number shows only the reviews
+  // linked to that batchId, for example only the reviews of "Batch 002".
+  const [reviewFilter, setReviewFilter] = useState<number | "all">("all");
+
+  // The batch numbers that have at least one review, newest first. These become
+  // the filter chips.
+  const reviewedBatchNumbers = useMemo(() => {
+    const unique = Array.from(new Set(reviews.map((r) => r.batchNumber)));
+    return unique.sort((a, b) => b - a);
+  }, [reviews]);
+
+  const filteredReviews = useMemo(() => {
+    if (reviewFilter === "all") return reviews;
+    return reviews.filter((r) => r.batchNumber === reviewFilter);
+  }, [reviews, reviewFilter]);
 
   const avgRating = product?.rating || 0;
   const totalReviews = product?.totalReviews || 0;
@@ -290,12 +339,26 @@ export default function ProductDetails() {
   const mediaWidth = Dimensions.get("window").width;
 
   const openModal = (mode: "cart" | "buynow") => {
-    if (!selectedVariation || selectedVariation.status !== "Available" || selectedVariation.stock < 1) {
+    if (!currentBatch) {
       showToast("This product is currently unavailable.");
       return;
     }
     setModalMode(mode);
     setQuantity(1);
+    // The tray size starts at whatever the farmer listed, so a half tray listing
+    // opens on half and a per tray listing opens on full. When that size has no
+    // stock left, for example only one half tray remains so no full tray can be
+    // made, the other size is used instead.
+    if (product && isEggProduct(product.name)) {
+      const base = String(product.unit || "").trim().toLowerCase();
+      const preferred: EggVariant = base === "half tray" ? "half" : "full";
+      const fallback: EggVariant = preferred === "half" ? "full" : "half";
+      const stockFor = (v: EggVariant) =>
+        baseStockToVariantStock(totalAvailableStock, product.unit, v);
+      setEggVariant(stockFor(preferred) >= 1 ? preferred : fallback);
+    } else {
+      setEggVariant(null);
+    }
     setModalVisible(true);
     Animated.parallel([
       Animated.timing(slideAnim, { toValue: 0, duration: 300, useNativeDriver: true }),
@@ -311,7 +374,7 @@ export default function ProductDetails() {
   };
 
   const handleAddToCart = async () => {
-    if (!product?.docId || !selectedVariation || quantity > selectedVariation.stock) return;
+    if (!product?.docId || !currentBatch) return;
     if (!buyerId) {
       showToast("Please log in to add items to your cart.");
       return;
@@ -319,17 +382,26 @@ export default function ProductDetails() {
     try {
       await addToCart({
         productId: product.docId,
-        variationId: selectedVariation.id,
-        variationName: selectedVariation.name,
+        // The batchId here is only a price reference while the item sits in the cart.
+        // At checkout recordSale() always picks the real FIFO batches at that
+        // moment, so time passing in the cart is not a problem.
+        batchId: currentBatch.docId,
+        batchNumber: currentBatch.batchNumber,
         buyerId,
         buyerName,
         farmerId: product.farmerId,
         farmName: product.farmName,
         name: product.name,
         image: product.image,
-        price: selectedVariation.price,
+        // For eggs the stored price, unit, and quantity are the ones the buyer
+        // sees, while baseQuantity is the equivalent in the farmer's unit and
+        // is what the backend deducts from stock.
+        price: unitPrice,
         quantity,
-        unit: selectedVariation.unit,
+        unit: activeEggOption ? activeEggOption.unit : product.unit,
+        eggVariant: activeEggOption ? activeEggOption.variant : null,
+        baseUnit: product.unit,
+        baseQuantity: baseQuantityForStock,
         createdAt: Date.now(),
       });
       showToast(`${product.name} added to cart!`);
@@ -346,7 +418,7 @@ export default function ProductDetails() {
   };
 
   const handleBuyNow = () => {
-    if (!product || !selectedVariation || quantity > selectedVariation.stock) return;
+    if (!product || !currentBatch) return;
     closeModal();
     router.push({
       pathname: "/buyer/checkout",
@@ -356,13 +428,16 @@ export default function ProductDetails() {
           farmerId: product.farmerId,
           products: [{
             productId: product.docId,
-            variationId: selectedVariation.id,
-            variationName: selectedVariation.name,
+            batchId: currentBatch.docId,
+            batchNumber: currentBatch.batchNumber,
             name: product.name,
-            price: selectedVariation.price,
+            price: unitPrice,
             image: product.image,
             quantity,
-            unit: selectedVariation.unit,
+            unit: activeEggOption ? activeEggOption.unit : product.unit,
+            eggVariant: activeEggOption ? activeEggOption.variant : null,
+            baseUnit: product.unit,
+            baseQuantity: baseQuantityForStock,
           }],
         }]),
         buyerId,
@@ -552,16 +627,20 @@ export default function ProductDetails() {
               )}
             </View>
 
-            {/* Price range across the listing's available variations. */}
+            {/* Price per unit. */}
             <View className="items-end">
-              {totalAvailableStock > 0 ? (
+              {currentBatch ? (
                 <>
                   <Text className="text-green-900 font-black text-2xl">
-                    ₱{minPrice.toFixed(2)}
-                    {maxPrice !== minPrice ? `–₱${maxPrice.toFixed(2)}` : ""}
+                    ₱{Number(currentBatch.price).toFixed(2)}
+                    <Text className="text-gray-400 text-xs font-normal">
+                      {" "}/{product.unit}
+                    </Text>
                   </Text>
                   <Text className="text-green-900 font-bold text-xs mt-1">
-                    {availableVariations.length} variations available
+                    {eggOptions.length === 2
+                      ? formatTrayStock(totalAvailableStock, product.unit)
+                      : `${totalAvailableStock} ${product.unit.replace(/^per\s+/i, "")} left`}
                   </Text>
                 </>
               ) : (
@@ -571,6 +650,13 @@ export default function ProductDetails() {
               )}
             </View>
           </View>
+
+          {/* Egg hint on its own row so the product name keeps its space. */}
+          {eggOptions.length === 2 && currentBatch && (
+            <Text className="text-gray-500 text-[11px] mt-1.5">
+              Available in Half Tray (15 pcs) and Full Tray (30 pcs) — choose when you add to cart or buy now.
+            </Text>
+          )}
 
          {/* Where the farm is. */}
           <View className="flex-row items-center justify-between mt-3">
@@ -592,12 +678,13 @@ export default function ProductDetails() {
 
           </View>
 
-          {selectedVariation && (
+          {/* Details of the batch that will be sold first. */}
+          {currentBatch && (
             <View className="mt-2 flex-row items-center py-2">
               <View className="flex-row items-center gap-2">
                 <Ionicons name="layers-outline" size={16} color={DARK_GREEN} />
                 <Text className="text-green-900 font-bold text-sm" numberOfLines={1}>
-                  {selectedVariation.name}: ₱{selectedVariation.price.toFixed(2)} / {selectedVariation.unit}
+                  Current Batch: Batch {String(currentBatch.batchNumber).padStart(3, "0")}
                 </Text>
               </View>
               <View style={{ flex: 1, height: 1, marginHorizontal: 10 }} />
@@ -678,7 +765,9 @@ export default function ProductDetails() {
 
               <View style={{ height: 1, backgroundColor: "#e5e7eb", opacity: 0.6, marginBottom: 16 }} />
 
-              {reviewedVariationIds.length > 0 && (
+              {/* One chip for "All" plus one per batch that has reviews. Picking a batch
+                  shows only the reviews of that batch in the list below. */}
+              {reviewedBatchNumbers.length > 0 && (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
@@ -699,24 +788,23 @@ export default function ProductDetails() {
                     </Text>
                   </TouchableOpacity>
 
-                  {reviewedVariationIds.map((variationId) => {
-                    const variationName =
-                      reviews.find((review) => review.variationId === variationId)
-                        ?.variationName || "Variation";
+                  {reviewedBatchNumbers.map((num) => {
+                    const isCurrent = currentBatch?.batchNumber === num;
                     return (
                       <TouchableOpacity
-                        key={variationId}
-                        onPress={() => setReviewFilter(variationId)}
+                        key={num}
+                        onPress={() => setReviewFilter(num)}
                         className={`px-4 py-2 rounded-full ${
-                          reviewFilter === variationId ? "bg-green-900" : "bg-gray-100"
+                          reviewFilter === num ? "bg-green-900" : "bg-gray-100"
                         }`}
                       >
                         <Text
                           className={`text-xs font-semibold ${
-                            reviewFilter === variationId ? "text-white" : "text-gray-600"
+                            reviewFilter === num ? "text-white" : "text-gray-600"
                           }`}
                         >
-                          {variationName}
+                          Batch {String(num).padStart(3, "0")}
+                          {isCurrent ? " (current)" : ""}
                         </Text>
                       </TouchableOpacity>
                     );
@@ -727,16 +815,14 @@ export default function ProductDetails() {
               <Text className="text-center text-gray-400 mt-6">
                 {reviewFilter === "all"
                   ? "No reviews yet."
-                  : "No reviews yet for this variation."}
+                  : `No reviews yet for Batch ${String(reviewFilter).padStart(3, "0")}.`}
               </Text>
             ) : (
               filteredReviews.map((item, index) => (
                 <View key={item.docId} className="mb-1">
-                  {item.variationName ? (
-                    <Text className="text-gray-400 text-[10px] mb-1">
-                      {item.variationName}
-                    </Text>
-                  ) : null}
+                  <Text className="text-gray-400 text-[10px] mb-1">
+                    Batch {String(item.batchNumber).padStart(3, "0")}
+                  </Text>
                   <ReviewCard item={item} />
                   {index < filteredReviews.length - 1 && (
                     <View style={{ height: 1, backgroundColor: "#f3f4f6", marginVertical: 12 }} />
@@ -776,11 +862,11 @@ export default function ProductDetails() {
 
           <TouchableOpacity
             onPress={() => openModal("cart")}
-            disabled={totalAvailableStock <= 0}
+            disabled={!currentBatch}
             className="px-5 items-center justify-center flex-row gap-2"
           >
-            <Ionicons name="cart-outline" size={20} color={totalAvailableStock > 0 ? DARK_GREEN : "#9ca3af"} />
-            <Text className={`font-bold text-sm ${totalAvailableStock > 0 ? "text-green-900" : "text-gray-400"}`}>
+            <Ionicons name="cart-outline" size={20} color={currentBatch ? DARK_GREEN : "#9ca3af"} />
+            <Text className={`font-bold text-sm ${currentBatch ? "text-green-900" : "text-gray-400"}`}>
               Cart
             </Text>
           </TouchableOpacity>
@@ -789,14 +875,14 @@ export default function ProductDetails() {
 
           <TouchableOpacity
             onPress={() => openModal("buynow")}
-            disabled={totalAvailableStock <= 0}
+            disabled={!currentBatch}
             className={`flex-1 items-center justify-center py-5 ${
-              totalAvailableStock > 0 ? "bg-green-900" : "bg-gray-300"
+              currentBatch ? "bg-green-900" : "bg-gray-300"
             }`}
-            style={totalAvailableStock > 0 ? { elevation: 4, shadowColor: DARK_GREEN, shadowOpacity: 0.25, shadowRadius: 8 } : undefined}
+            style={currentBatch ? { elevation: 4, shadowColor: DARK_GREEN, shadowOpacity: 0.25, shadowRadius: 8 } : undefined}
           >
             <Text className="text-white font-black text-base">
-              {totalAvailableStock > 0 ? "Buy Now" : "Out of Stock"}
+              {currentBatch ? "Buy Now" : "Out of Stock"}
             </Text>
           </TouchableOpacity>
         </View>
@@ -819,7 +905,7 @@ export default function ProductDetails() {
           />
         </Animated.View>
 
-        {product && selectedVariation && (
+        {currentBatch && (
           <Animated.View
             className="bg-white rounded-t-[32px] px-6 pt-3 pb-10 absolute bottom-0 w-full"
             style={{
@@ -883,61 +969,87 @@ export default function ProductDetails() {
                   ₱{Number(unitPrice).toFixed(2)}
                   <Text className="text-gray-400 text-xs font-normal">
                     {" / "}
-                    {selectedVariation.unit}
+                    {activeEggOption ? activeEggOption.unit : product.unit}
                   </Text>
                 </Text>
+
+                {/* A single stock line in trays, whichever tray size is picked. */}
                 <Text className="text-gray-400 text-xs mt-0.5">
-                  {selectedVariation.stock} {selectedVariation.unit} available
+                  {activeEggOption
+                    ? formatTrayStock(totalAvailableStock, product.unit)
+                    : `${totalAvailableStock} ${product.unit} available`}
                 </Text>
               </View>
             </View>
 
             <View className="h-px bg-gray-100 mb-4" />
 
-            <View className="mb-4">
-              <Text className="text-gray-700 font-semibold mb-2">
-                Choose size or unit
-              </Text>
-              <ScrollView style={{ maxHeight: 184 }} showsVerticalScrollIndicator={false}>
-                {variations.map((variation) => {
-                  const selected = variation.id === selectedVariation.id;
-                  const unavailable =
-                    variation.status !== "Available" || variation.stock <= 0;
-                  return (
-                    <TouchableOpacity
-                      key={variation.id}
-                      disabled={unavailable}
-                      onPress={() => {
-                        setSelectedVariationId(variation.id);
-                        setQuantity(1);
-                      }}
-                      className="flex-row items-center justify-between rounded-xl border px-3 py-3 mb-2"
-                      style={{
-                        borderColor: selected ? DARK_GREEN : "#e5e7eb",
-                        backgroundColor: selected ? "#f0fdf4" : "#ffffff",
-                        borderWidth: selected ? 2 : 1,
-                        opacity: unavailable ? 0.55 : 1,
-                      }}
-                    >
-                      <View className="flex-1 pr-3">
-                        <Text className="text-gray-900 font-bold">{variation.name}</Text>
-                        <Text className="text-gray-500 text-xs">
-                          {variation.stock} {variation.unit} available
+            {/* Half or Full tray picker, only shown for eggs. */}
+            {activeEggOption && eggOptions.length === 2 && (
+              <View className="mb-4">
+                <Text className="text-gray-700 font-semibold mb-2">
+                  Choose tray size
+                </Text>
+                <View className="flex-row gap-2">
+                  {eggOptions.map((opt) => {
+                    const selected = opt.variant === activeEggOption.variant;
+                    // A tray size that cannot be made from the current stock is disabled and shows
+                    // no count, so the buyer is not left guessing why.
+                    const optStock =
+                      product && currentBatch
+                        ? baseStockToVariantStock(
+                            totalAvailableStock,
+                            product.unit,
+                            opt.variant
+                          )
+                        : 0;
+                    const disabled = optStock < 1;
+                    return (
+                      <TouchableOpacity
+                        key={opt.variant}
+                        disabled={disabled}
+                        onPress={() => {
+                          setEggVariant(opt.variant);
+                          setQuantity(1);
+                        }}
+                        className="flex-1 rounded-[10px] border px-3 py-3"
+                        style={{
+                          borderColor: selected ? DARK_GREEN : "#e5e7eb",
+                          backgroundColor: selected
+                            ? "#f0fdf4"
+                            : disabled
+                              ? "#f3f4f6"
+                              : "#ffffff",
+                          borderWidth: selected ? 2 : 1,
+                          opacity: disabled ? 0.5 : 1,
+                        }}
+                      >
+                        <Text
+                          className="font-bold text-sm text-center"
+                          style={{ color: selected ? DARK_GREEN : "#374151" }}
+                        >
+                          {opt.variant === "half" ? "Half Tray" : "Full Tray"}
                         </Text>
-                        {variation.description ? (
-                          <Text className="text-gray-400 text-xs mt-0.5" numberOfLines={1}>
-                            {variation.description}
+                        <Text className="text-gray-500 text-[11px] text-center mt-0.5">
+                          {opt.pcs} pcs
+                        </Text>
+                        <Text
+                          className="font-black text-sm text-center mt-1"
+                          style={{ color: selected ? DARK_GREEN : "#111827" }}
+                        >
+                          ₱{Number(opt.price).toFixed(2)}
+                        </Text>
+                        {disabled && (
+                          <Text className="text-gray-400 text-[11px] text-center mt-0.5">
+                            Not available
                           </Text>
-                        ) : null}
-                      </View>
-                      <Text className="text-green-900 font-black">
-                        ₱{variation.price.toFixed(2)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             <View className="flex-row justify-between items-center mb-4">
               <Text className="text-gray-700 font-semibold">
@@ -983,10 +1095,21 @@ export default function ProductDetails() {
               </View>
             </View>
 
+            {baseQuantityForStock > currentBatch.stock && (
+              <Text className="text-orange-600 text-[11px] mb-2 -mt-2">
+                {currentBatch.stock} {product.unit} mula sa Batch{" "}
+                {String(currentBatch.batchNumber).padStart(3, "0")}, at ang
+                sobra ay mula sa susunod na batch.
+              </Text>
+            )}
+
             {/* Running total of the chosen quantity. */}
             <View className="flex-row justify-between items-center px-1 py-3 mb-5">
               <Text className="text-gray-500 font-medium">
-                Total ({quantity}x {selectedVariation.name})
+                Total
+                {activeEggOption
+                  ? ` (${quantity}x ${activeEggOption.label})`
+                  : ""}
               </Text>
 
               <Text className="font-black text-green-900 text-xl">

@@ -154,16 +154,6 @@ export const createOrder = async (order: OrderType) => {
   };
 };
 
-export const recordWalkInSale = async (
-  productId: string,
-  variationId: string,
-  quantity: number
-) =>
-  requestBackend(`/products/${encodeURIComponent(productId)}/sales`, {
-    method: "POST",
-    body: JSON.stringify({ variationId, quantity }),
-  });
-
 // Replaces the products of an order. This is only allowed while the order is
 // still pending, because after acceptance the backend has already priced the
 // order and, for GCash, created the payment.
