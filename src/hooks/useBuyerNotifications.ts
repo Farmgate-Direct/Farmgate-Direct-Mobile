@@ -15,28 +15,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { db } from "../../FirebaseConfig";
 import { listenChats } from "../services/chatService";
 import { toMillis } from "../services/notificationService";
-import { OrderType } from "../types/order";
+import type { OrderType } from "../types/order";
+import type { BuyerNotification } from "../types/notification";
 
 // Field in the "orders" collection that holds the buyer's uid. Change it here
 // if the backend ever renames the field.
 const ORDER_BUYER_FIELD = "buyerId";
-
-// The kinds of entries the buyer feed can contain.
-export type BuyerNotifKind = "order" | "message" | "payment" | "system";
-
-// One entry in the buyer feed.
-export type BuyerNotif = {
-  id: string;
-  kind: BuyerNotifKind;
-  title: string;
-  body: string;
-  createdAt: any;
-  orderId?: string;
-  chatId?: string;
-  farmerId?: string;
-  farmerName?: string;
-  farmerProfileImage?: string;
-};
 
 // Formats an amount the way the notification text shows it.
 const peso = (n: number) =>
@@ -52,6 +36,9 @@ const orderLabel = (o: OrderType) =>
 export function useBuyerNotifications() {
   const [buyerId, setBuyerId] = useState("");
   const [orders, setOrders] = useState<OrderType[]>([]);
+  const [storedNotifications, setStoredNotifications] = useState<
+    BuyerNotification[]
+  >([]);
   const [chats, setChats] = useState<any[]>([]);
   const [lastSeen, setLastSeen] = useState(0);
   const [seenLoaded, setSeenLoaded] = useState(false);
@@ -96,6 +83,31 @@ export function useBuyerNotifications() {
       }
     );
     return () => unsub();
+  }, [buyerId]);
+
+  useEffect(() => {
+    if (!buyerId) return;
+    const notificationsQuery = query(
+      collection(db, "notifications"),
+      where("userId", "==", buyerId)
+    );
+    return onSnapshot(
+      notificationsQuery,
+      (snapshot) => {
+        setStoredNotifications(
+          snapshot.docs.map(
+            (item) =>
+              ({
+                ...item.data(),
+                id: item.id,
+              }) as BuyerNotification
+          )
+        );
+      },
+      (error) => {
+        console.error("BUYER NOTIFICATIONS ERROR:", error);
+      }
+    );
   }, [buyerId]);
 
 // Watches the buyer's chats and looks up the other participant, so a message
@@ -171,7 +183,7 @@ export function useBuyerNotifications() {
 // Turns the latest orders and chats into feed entries. Orders are capped at 15
   // and chats at 10 so the list stays short.
   const items = useMemo(() => {
-    const list: BuyerNotif[] = [];
+    const list: BuyerNotification[] = [...storedNotifications];
 
     const latestOrders = [...orders]
       .sort(
@@ -223,15 +235,34 @@ export function useBuyerNotifications() {
           });
           break;
         case "cancelled":
-          list.push({
-            ...base,
-            id: `order-cancelled-${o.id}`,
-            kind: "system",
-            title: "Order cancelled",
-            body: `Order ${no} was cancelled.`,
-            createdAt:
-              (o as any).cancelledAt || (o as any).updatedAt || o.createdAt,
-          });
+          if (o.autoCancelled) {
+            const hasStoredCancellation = storedNotifications.some(
+              (notification) =>
+                notification.orderId === o.id &&
+                notification.title === "Order Automatically Cancelled"
+            );
+            if (!hasStoredCancellation) {
+              list.push({
+                ...base,
+                id: `order-auto-cancelled-${o.id}`,
+                kind: "system",
+                title: "Order Automatically Cancelled",
+                body: "Your order has been automatically cancelled because the farmer did not accept it within 2 days.",
+                createdAt:
+                  o.autoCancelledAt || (o as any).cancelledAt || o.updatedAt || o.createdAt,
+              });
+            }
+          } else {
+            list.push({
+              ...base,
+              id: `order-cancelled-${o.id}`,
+              kind: "system",
+              title: "Order cancelled",
+              body: `Order ${no} was cancelled.`,
+              createdAt:
+                (o as any).cancelledAt || (o as any).updatedAt || o.createdAt,
+            });
+          }
           break;
         default:
           list.push({
@@ -286,7 +317,7 @@ export function useBuyerNotifications() {
       });
 
     return list.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
-  }, [orders, chats, buyerId]);
+  }, [orders, chats, buyerId, storedNotifications]);
 
   // Anything newer than the last-seen marker counts as unread.
   const unreadCount = useMemo(

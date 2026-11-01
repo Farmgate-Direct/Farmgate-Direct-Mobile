@@ -1,6 +1,6 @@
 // Scrollable row of category icons used to filter products.
 import { ScrollView, Image, Text, TouchableOpacity, View } from "react-native";
-import { categories } from "@/constants/categories";
+import { categories } from "@/src/constants/categories";
 
 type Props = {
   selectedCategory: string;

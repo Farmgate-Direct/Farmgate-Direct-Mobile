@@ -13,13 +13,14 @@ import {
   updateDoc,
   where,
   increment,
-  limit,
   runTransaction,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 import { db } from "../../FirebaseConfig";
+import { normalizeProductName } from "@/src/constants/productCatalog";
 
-import {
+import type {
   CreateProductInput,
   ProductType,
   CreateBatchInput,
@@ -34,8 +35,6 @@ import {
 type HarvestRecordWithType = CreateHarvestRecordInput & {
   type?: "harvest" | "restock";
 };
-
-import { normalizeProductName } from "../../constants/productCatalog";
 
 const productCollection = collection(db, "products");
 const batchCollection = collection(db, "productBatches");
@@ -230,9 +229,15 @@ export const getHarvestRecordsByBatch = async (
   batchId: string
 ): Promise<HarvestRecordType[]> => {
   try {
+    const farmerId = getAuth().currentUser?.uid;
+    if (!farmerId) {
+      return [];
+    }
+
     const q = query(
       harvestCollection,
-      where("batchId", "==", batchId)
+      where("batchId", "==", batchId),
+      where("farmerId", "==", farmerId)
     );
 
     const snapshot = await getDocs(q);
@@ -1197,52 +1202,37 @@ export const addReview = async (
   review: CreateReviewInput
 ) => {
   try {
-    await addDoc(
-      reviewCollection,
-      review
-    );
+    const reviewId = `${review.orderId}_${review.productId}`;
+    const reviewRef = doc(reviewCollection, reviewId);
+    const productRef = doc(db, "products", review.productId);
 
-    const productRef = doc(
-      db,
-      "products",
-      review.productId
-    );
+    await runTransaction(db, async (transaction) => {
+      const [existingReview, productSnapshot] = await Promise.all([
+        transaction.get(reviewRef),
+        transaction.get(productRef),
+      ]);
 
-    const productSnap =
-      await getDoc(productRef);
+      if (existingReview.exists()) {
+        throw new Error("You have already reviewed this product.");
+      }
+      if (!productSnapshot.exists()) {
+        throw new Error("Product not found.");
+      }
 
-    if (productSnap.exists()) {
-      const data =
-        productSnap.data() as CreateProductInput;
+      const product = productSnapshot.data() as CreateProductInput;
+      const previousCount = Math.max(0, Number(product.totalReviews) || 0);
+      const previousRating = Math.max(0, Number(product.rating) || 0);
+      const totalReviews = previousCount + 1;
+      const rating =
+        (previousRating * previousCount + review.rating) / totalReviews;
 
-      const newTotalReviews =
-        (data.totalReviews || 0) +
-        1;
-
-      const newRating =
-        (
-          (
-            data.rating || 0
-          ) *
-            (
-              data.totalReviews ||
-              0
-            ) +
-          review.rating
-        ) /
-        newTotalReviews;
-
-      await updateDoc(
-        productRef,
-        {
-          totalReviews:
-            newTotalReviews,
-
-          rating:
-            newRating,
-        }
-      );
-    }
+      transaction.set(reviewRef, review);
+      transaction.update(productRef, {
+        rating,
+        totalReviews,
+        lastReviewId: reviewId,
+      });
+    });
   } catch (error) {
     console.log(
       "ADD REVIEW ERROR:",

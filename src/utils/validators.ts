@@ -121,7 +121,7 @@ export const getRegisterErrorMessage = (code?: string) => {
     case "auth/weak-password":
       return "Password is too weak. Use at least 8 characters with letters and numbers.";
     case "auth/network-request-failed":
-      return "Network error. Check your connection and try again.";
+      return "Check your internet connection and try again.";
     case "auth/too-many-requests":
       return "Too many attempts. Wait a moment, then try again.";
     case "auth/no-current-user":
@@ -129,7 +129,7 @@ export const getRegisterErrorMessage = (code?: string) => {
     case "auth/user-token-expired":
       return "Your session expired. Please submit registration again.";
     case "auth/operation-not-allowed":
-      return "Email registration is disabled. Please contact support.";
+      return "We can't create your account right now. Please try again later or contact support.";
     case "functions/not-found":
     case "functions/internal":
     case "functions/unavailable":

@@ -26,7 +26,8 @@ import {
 import { db } from "../../../FirebaseConfig";
 import { uploadProfileImageAsync } from "@/src/services/cloudinaryProfileService";
 import { deleteCloudinaryImage } from "../../../src/services/deleteImageService";
-import { useToast } from "../../../context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const AccountSetting = () => {
   const router = useRouter();
@@ -104,8 +105,13 @@ const AccountSetting = () => {
 
       showToast("Profile updated");
     } catch (error) {
-      console.log(error);
-      showToast("Failed to upload image");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Upload buyer profile photo",
+          "We couldn't update your photo. Please try another image or try again later."
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -157,7 +163,11 @@ const AccountSetting = () => {
       closePasswordModal();
       showToast("Password changed successfully");
     } catch (error: unknown) {
-      console.log(error);
+      const userMessage = getUserFriendlyErrorMessage(
+        error,
+        "Change buyer password",
+        "We couldn't change your password right now. Please try again."
+      );
 
       const errorCode =
         typeof error === "object" && error !== null && "code" in error
@@ -177,11 +187,7 @@ const AccountSetting = () => {
         return;
       }
 
-      showToast(
-        error instanceof Error
-          ? error.message
-          : "Failed to change password. Please try again."
-      );
+      showToast(userMessage);
     } finally {
       setSavingPassword(false);
     }
@@ -386,7 +392,7 @@ const AccountSetting = () => {
                     accessibilityLabel={showCurrentPassword ? "Hide current password" : "Show current password"}
                   >
                     <MaterialCommunityIcons
-                      name={showCurrentPassword ? "eye-off-outline" : "eye-outline"}
+                      name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
                       size={20}
                       color="#9CA3AF"
                     />
@@ -420,7 +426,7 @@ const AccountSetting = () => {
                     accessibilityLabel={showNewPassword ? "Hide new password" : "Show new password"}
                   >
                     <MaterialCommunityIcons
-                      name={showNewPassword ? "eye-off-outline" : "eye-outline"}
+                      name={showNewPassword ? "eye-outline" : "eye-off-outline"}
                       size={20}
                       color="#9CA3AF"
                     />

@@ -4,7 +4,7 @@ import { Image, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
-import { ProductType } from "@/src/types/product";
+import type { ProductType } from "@/src/types/product";
 
 const IMG_HEIGHT = 140;
 

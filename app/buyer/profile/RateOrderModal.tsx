@@ -14,6 +14,7 @@ import { markProductReviewed } from "@/src/services/orderService";
 import { OrderProduct } from "@/src/types/order";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 type Props = {
   visible: boolean;
@@ -72,6 +73,7 @@ const RateOrderModal = ({
 
       await addReview({
         productId: product.productId,
+        orderProduct: product,
         batchId: product.batchId || "",
         batchNumber: product.batchNumber ?? 0,
         harvestRecordId: product.harvestRecordId || undefined,
@@ -90,8 +92,13 @@ const RateOrderModal = ({
       resetForm();
       onClose();
     } catch (err) {
-      console.log(err);
-      setError("Failed to submit review. Please try again.");
+      setError(
+        getUserFriendlyErrorMessage(
+          err,
+          "Submit buyer product review",
+          "We couldn't submit your review right now. Please try again in a moment."
+        )
+      );
     } finally {
       setSubmitting(false);
     }

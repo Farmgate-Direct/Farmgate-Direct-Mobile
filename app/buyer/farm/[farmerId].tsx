@@ -14,13 +14,17 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import { checkSavedFarm, saveFarm, unsaveFarm } from "@/src/services/savedFarmService";
 import { getFarmerProductNames } from "@/src/services/productService";
-import ProductCard from "@/components/ProductCard";
+import ProductCard from "@/src/components/buyer/ProductCard";
 import { ProductType } from "@/src/types/product";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 const STATUS_BAR = Constants.statusBarHeight ?? 44;
 const DARK_GREEN = "#14532d";
@@ -37,6 +41,8 @@ const CATEGORY_OPTIONS = ["All", "Vegetables", "Fruits", "Egg & Poultry", "Rice 
 
 const FarmProfile = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { farmerId } = useLocalSearchParams<{ farmerId: string }>();
 
   const [loading, setLoading] = useState(true);
@@ -94,7 +100,7 @@ const FarmProfile = () => {
           setIsFavorited(saved);
         }
       } catch (e) {
-        console.log("LOAD FARM PROFILE ERROR:", e);
+        getUserFriendlyErrorMessage(e, "Load buyer farm profile");
       } finally {
         setLoading(false);
       }
@@ -123,7 +129,13 @@ const FarmProfile = () => {
         setIsFavorited(true);
       }
     } catch (e) {
-      console.log("TOGGLE FAVORITE ERROR:", e);
+      showToast(
+        getUserFriendlyErrorMessage(
+          e,
+          "Save buyer favorite farm",
+          "We couldn't update your saved farms. Please try again."
+        )
+      );
     }
   };
 
@@ -155,7 +167,9 @@ const FarmProfile = () => {
         keyExtractor={(item, index) => item.docId ?? index.toString()}
         numColumns={2}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
+        }}
         columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 14 }}
         ListHeaderComponent={
           <>

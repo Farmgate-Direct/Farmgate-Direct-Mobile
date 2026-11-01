@@ -22,6 +22,7 @@ import {
 
 import { db } from "../../../FirebaseConfig";
 import { UserType } from "../../../src/types/user";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 // Main profile screen component.
 const Profile = () => {
@@ -60,7 +61,7 @@ const Profile = () => {
       }
 
     } catch (error) {
-      console.log("PROFILE ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Load farmer profile");
     } finally {
       setLoading(false);
     }
@@ -73,7 +74,7 @@ const Profile = () => {
       await AsyncStorage.removeItem("user");
       router.replace("/auth/login");
     } catch (error) {
-      console.log("LOGOUT ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Sign out farmer");
     }
   };
 
@@ -92,6 +93,7 @@ if (loading) {
     { label: "My Account", icon: "account-outline", route: "/farmer/profile/account-setting" },
     { label: "Farm Profile", icon: "sprout-outline", route: "/farmer/profile/edit-profile-farm" },
     { label: "Balance", icon: "wallet-outline", route: "/farmer/profile/balance" },
+    { label: "Sales Report", icon: "file-chart-outline", route: "/farmer/profile/sales-report" },
     { label: "QR Code", icon: "qrcode", route: "/farmer/profile/qr" },
   ] as const;
 
@@ -152,7 +154,10 @@ if (loading) {
         >
           <View className="flex-row items-center gap-3">
             <MaterialCommunityIcons name="logout" size={20} color="#dc2626" />
-            <Text className="text-sm font-semibold text-red-600">Log out</Text>
+            <View className="items-start">
+              <Text className="text-sm font-semibold text-red-600">Log out</Text>
+              <Text className="text-[10px] text-red-500">(Mag-log out)</Text>
+            </View>
           </View>
         </TouchableOpacity>
       </View>
@@ -197,14 +202,20 @@ if (loading) {
                 className="mr-2 flex-1 items-center rounded-[5px] bg-gray-200 px-4 py-2"
                 onPress={() => setModalVisible(false)}
               >
-                <Text className="font-semibold text-gray-700">Cancel</Text>
+                <View className="items-center justify-center">
+                  <Text className="font-semibold text-gray-700">Cancel</Text>
+                  <Text className="text-[10px] text-gray-500">(Kanselahin)</Text>
+                </View>
               </TouchableOpacity>
               <TouchableOpacity
                 className="ml-2 flex-1 items-center rounded-[5px] px-4 py-2"
                 style={{ backgroundColor: "#dc2626" }}
                 onPress={handleLogout}
               >
-                <Text className="font-semibold text-white">Log out</Text>
+                <View className="items-center justify-center">
+                  <Text className="font-semibold text-white">Log out</Text>
+                  <Text className="text-[10px] text-white/80">(Mag-log out)</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>

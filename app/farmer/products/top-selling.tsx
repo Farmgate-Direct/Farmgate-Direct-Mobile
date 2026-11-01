@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { db } from "../../../FirebaseConfig";
 import { ProductType } from "../../../src/types/product";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 export default function TopSellingProducts() {
   const [products, setProducts] = useState<ProductType[]>([]);
@@ -60,12 +61,12 @@ export default function TopSellingProducts() {
             setLoading(false);
           },
           (error) => {
-            console.error("LOAD TOP-SELLING PRODUCTS ERROR:", error);
+            getUserFriendlyErrorMessage(error, "Load farmer top-selling products");
             setLoading(false);
           }
         );
       } catch (error) {
-        console.error("LOAD TOP-SELLING PRODUCTS ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Load farmer top-selling products");
         setLoading(false);
       }
     };

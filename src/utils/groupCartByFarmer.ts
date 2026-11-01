@@ -1,5 +1,5 @@
 // Groups cart items by farmer for checkout.
-import { CartItem } from "../src/types/cart";
+import { CartItem } from "../types/cart";
 
 // One farmer's basket, including every product bought from that farmer.
 export type FarmerCart = {

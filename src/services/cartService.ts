@@ -9,6 +9,7 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 
 import { db } from "../../FirebaseConfig";
 
@@ -115,7 +116,15 @@ export const removeCartItem = async (docId: string) => {
 // Removes the cart lines of a product that was deleted.
 export const deleteCartItemsByProductId = async (productId: string) => {
   try {
-    const q = query(cartCollection, where("productId", "==", productId));
+    const farmerId = getAuth().currentUser?.uid;
+    if (!farmerId) {
+      throw new Error("Your login session has expired. Please login again.");
+    }
+    const q = query(
+      cartCollection,
+      where("productId", "==", productId),
+      where("farmerId", "==", farmerId)
+    );
     const snapshot = await getDocs(q);
 
     const deletes = snapshot.docs.map((d) => deleteDoc(doc(db, "cart", d.id)));
@@ -129,7 +138,15 @@ export const deleteCartItemsByProductId = async (productId: string) => {
 // Removes the cart lines of one deleted batch, leaving other batches untouched.
 export const deleteCartItemsByBatchId = async (batchId: string) => {
   try {
-    const q = query(cartCollection, where("batchId", "==", batchId));
+    const farmerId = getAuth().currentUser?.uid;
+    if (!farmerId) {
+      throw new Error("Your login session has expired. Please login again.");
+    }
+    const q = query(
+      cartCollection,
+      where("batchId", "==", batchId),
+      where("farmerId", "==", farmerId)
+    );
     const snapshot = await getDocs(q);
 
     const deletes = snapshot.docs.map((d) => deleteDoc(doc(db, "cart", d.id)));

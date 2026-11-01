@@ -18,6 +18,7 @@ import {
 import {
   BatchType,
 } from "../../../src/types/product";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 type Props = {
   visible: boolean;
@@ -254,11 +255,13 @@ const EditBatchModal = ({
 
       onClose();
 
-    } catch (err: any) {
-
+    } catch (err) {
       setError(
-        err?.message ||
-          "May error na naganap."
+        getUserFriendlyErrorMessage(
+          err,
+          "Save farmer product batch",
+          "We couldn't save these batch changes right now. Please try again in a moment."
+        )
       );
     }
   };

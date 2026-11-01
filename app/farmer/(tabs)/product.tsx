@@ -1,6 +1,6 @@
 // Farmer product list and batch manager screen.
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   Dimensions,
@@ -13,6 +13,7 @@ import {
   View,
   ActivityIndicator,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -52,6 +53,13 @@ import {
   uploadImageAsync,
   uploadProductVideoAsync,
 } from "../../../src/services/cloudinaryService";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import FarmerTutorialVideoModal from "@/src/components/FarmerTutorialVideoModal";
+import {
+  getFarmerScreenBottomPadding,
+  getFarmerTabBarClearance,
+} from "@/src/constants/farmerLayout";
 
 const formatDate = (ts: number) =>
   new Date(ts).toLocaleDateString(undefined, {
@@ -139,6 +147,8 @@ export const ProductScreen = ({
   detailProductId,
   initialViewMode,
 }: ProductScreenProps = {}) => {
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { filter: routeFilter } = useLocalSearchParams<{ filter?: string }>();
   const [viewMode, setViewMode] = useState<ViewMode>(
     initialViewMode || "active"
@@ -148,6 +158,7 @@ export const ProductScreen = ({
   >(initialViewMode === "archived" ? "archived" : "active");
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [showProductsTutorial, setShowProductsTutorial] = useState(false);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
   const sortButtonRef = useRef<View>(null);
 
@@ -208,24 +219,7 @@ export const ProductScreen = ({
     });
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      fetchProducts();
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (
-      !detailProductId &&
-      (routeFilter === "low_stock" || routeFilter === "out_of_stock")
-    ) {
-      setViewMode("active");
-      setListFilter(routeFilter);
-    }
-  }, [detailProductId, routeFilter]);
-
-// Load active and archived products with batches.
-  const fetchProducts = async () => {
+  const fetchProducts = useCallback(async () => {
     try {
       const [active, archived] = await Promise.all([
         getFarmerProducts(user.uid),
@@ -250,12 +244,29 @@ export const ProductScreen = ({
 
       setBatchesByProduct(Object.fromEntries(batchEntries));
     } catch (error) {
-      console.log("FETCH PRODUCTS ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Load farmer products");
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
+  useEffect(() => {
+    if (user) {
+      void fetchProducts();
+    }
+  }, [user, fetchProducts]);
+
+  useEffect(() => {
+    if (
+      !detailProductId &&
+      (routeFilter === "low_stock" || routeFilter === "out_of_stock")
+    ) {
+      setViewMode("active");
+      setListFilter(routeFilter);
+    }
+  }, [detailProductId, routeFilter]);
+
+// Load active and archived products with batches.
   // Always load the latest harvest records.
   const loadHarvestsForBatch = async (batchId: string) => {
     try {
@@ -266,7 +277,7 @@ export const ProductScreen = ({
         [batchId]: records,
       }));
     } catch (error) {
-      console.log("LOAD HARVESTS ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Load farmer harvest history");
     }
   };
 
@@ -340,7 +351,6 @@ export const ProductScreen = ({
 
       setShowAddModal(false);
     } catch (err) {
-      console.log("ADD HARVEST ERROR:", err);
       throw err;
     } finally {
       setUploading(false);
@@ -375,7 +385,6 @@ export const ProductScreen = ({
 
       setShowEditModal(false);
     } catch (err) {
-      console.log("EDIT PRODUCT ERROR:", err);
       throw err;
     } finally {
       setEditing(false);
@@ -406,7 +415,6 @@ export const ProductScreen = ({
         await loadHarvestsForBatch(batchDocId);
       }
     } catch (error) {
-      console.log("SAVE BATCH ERROR:", error);
       throw error;
     } finally {
       setSavingBatch(false);
@@ -426,7 +434,7 @@ export const ProductScreen = ({
 
       setShowRecordSaleModal(false);
     } catch (err) {
-      console.log("RECORD SALE ERROR:", err);
+      throw err;
     } finally {
       setRecordingSale(false);
     }
@@ -446,7 +454,13 @@ export const ProductScreen = ({
 
       setShowDeleteModal(false);
     } catch (err) {
-      console.log("ARCHIVE PRODUCT ERROR:", err);
+      showToast(
+        getUserFriendlyErrorMessage(
+          err,
+          "Archive farmer product",
+          "We couldn't update this product right now. Please try again."
+        )
+      );
     } finally {
       setDeleting(false);
     }
@@ -455,7 +469,7 @@ export const ProductScreen = ({
   const handleUnarchiveProduct = (product: ProductType) => {
     setConfirmation({
       title: "Unarchive Product",
-      message: `Ibalik sa listing si "${product.name}"? Makikita na itong muli ng mga buyer.`,
+      message: `Return "${product.name}" to the listing? Buyers will be able to see it again.`,
       confirmLabel: "Unarchive",
       onConfirm: async () => {
         try {
@@ -463,7 +477,13 @@ export const ProductScreen = ({
 
           await fetchProducts();
         } catch (err) {
-          console.log("UNARCHIVE PRODUCT ERROR:", err);
+          showToast(
+            getUserFriendlyErrorMessage(
+              err,
+              "Unarchive farmer product",
+              "We couldn't update this product right now. Please try again."
+            )
+          );
         }
       },
     });
@@ -472,12 +492,12 @@ export const ProductScreen = ({
   const handleArchiveBatchPress = (batch: BatchType) => {
     setConfirmation({
       title: "Archive Batch",
-      message: `I-a-archive ang Batch ${String(
+      message: `Archive Batch ${String(
         batch.batchNumber
       ).padStart(
         3,
         "0"
-      )}? Hindi na ito ibebenta o makikita ng buyer, pero puwede mo pa itong ma-unarchive.`,
+      )}? It will no longer be sold or visible to buyers, but you can unarchive it later.`,
       confirmLabel: "Archive",
       destructive: true,
       onConfirm: async () => {
@@ -486,7 +506,13 @@ export const ProductScreen = ({
 
           await fetchProducts();
         } catch (err) {
-          console.log("ARCHIVE BATCH ERROR:", err);
+          showToast(
+            getUserFriendlyErrorMessage(
+              err,
+              "Archive farmer product batch",
+              "We couldn't update this batch right now. Please try again."
+            )
+          );
         }
       },
     });
@@ -495,9 +521,9 @@ export const ProductScreen = ({
   const handleUnarchiveBatch = (batch: BatchType) => {
     setConfirmation({
       title: "Unarchive Batch",
-      message: `Ibalik sa aktibong benta si Batch ${String(
+      message: `Return Batch ${String(
         batch.batchNumber
-      ).padStart(3, "0")}?`,
+      ).padStart(3, "0")} to active sales?`,
       confirmLabel: "Unarchive",
       onConfirm: async () => {
         try {
@@ -505,7 +531,13 @@ export const ProductScreen = ({
 
           await fetchProducts();
         } catch (err) {
-          console.log("UNARCHIVE BATCH ERROR:", err);
+          showToast(
+            getUserFriendlyErrorMessage(
+              err,
+              "Unarchive farmer product batch",
+              "We couldn't update this batch right now. Please try again."
+            )
+          );
         }
       },
     });
@@ -571,6 +603,17 @@ export const ProductScreen = ({
               : "Product list"}
           </Text>
         </View>
+        {!detailProductId && (
+          <TouchableOpacity
+            onPress={() => setShowProductsTutorial(true)}
+            className="ml-3 h-10 w-10 items-center justify-center"
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open product listing tutorial"
+          >
+            <Ionicons name="play-circle-outline" size={25} color="white" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <View className="flex-1 px-4 pt-4">
@@ -609,7 +652,9 @@ export const ProductScreen = ({
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{
-            paddingBottom: detailProductId ? 24 : 112,
+            paddingBottom: detailProductId
+              ? getFarmerScreenBottomPadding(insets.bottom)
+              : getFarmerTabBarClearance(insets.bottom) + 72,
           }}
         >
           {displayedProducts.length === 0 && (
@@ -729,9 +774,12 @@ export const ProductScreen = ({
                                 size={17}
                                 color="#14532d"
                               />
-                              <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                                Record sale
-                              </Text>
+                              <View className="ml-1.5 items-center">
+                                <Text className="text-[11px] font-semibold text-gray-700">
+                                  Record sale
+                                </Text>
+                                <Text className="text-[9px] text-gray-500">(Itala ang Benta)</Text>
+                              </View>
                             </TouchableOpacity>
                             <TouchableOpacity
                               onPress={() => {
@@ -747,9 +795,12 @@ export const ProductScreen = ({
                                 size={17}
                                 color="#14532d"
                               />
-                              <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                                Edit
-                              </Text>
+                              <View className="ml-1.5 items-center">
+                                <Text className="text-[11px] font-semibold text-gray-700">
+                                  Edit
+                                </Text>
+                                <Text className="text-[9px] text-gray-500">(I-edit)</Text>
+                              </View>
                             </TouchableOpacity>
                             <TouchableOpacity
                               onPress={() => {
@@ -765,9 +816,12 @@ export const ProductScreen = ({
                                 size={17}
                                 color="#b45309"
                               />
-                              <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                                Archive
-                              </Text>
+                              <View className="ml-1.5 items-center">
+                                <Text className="text-[11px] font-semibold text-gray-700">
+                                  Archive
+                                </Text>
+                                <Text className="text-[9px] text-gray-500">(I-archive)</Text>
+                              </View>
                             </TouchableOpacity>
                           </>
                         ) : (
@@ -781,9 +835,12 @@ export const ProductScreen = ({
                               size={17}
                               color="#14532d"
                             />
-                            <Text className="ml-1.5 text-xs font-semibold text-gray-700">
-                              Restore product
-                            </Text>
+                            <View className="ml-1.5 items-start">
+                              <Text className="text-[11px] font-semibold text-gray-700">
+                                Restore product
+                              </Text>
+                              <Text className="text-[9px] text-gray-500">(Ibalik ang Produkto)</Text>
+                            </View>
                           </TouchableOpacity>
                         )}
                       </View>
@@ -1038,12 +1095,8 @@ export const ProductScreen = ({
                         {viewMode ===
                           "archived" && (
                           <Text className="mb-2 text-sm text-gray-500">
-                            Naka-archive ang buong
-                            produktong ito, kaya
-                            naka-lock din ang mga
-                            batch nito. I-unarchive
-                            muna ang produkto bago
-                            maka-unarchive ng batch.
+                            This entire product is archived, so its batches are also
+                            locked. Unarchive the product first before unarchiving any batch.
                           </Text>
                         )}
 
@@ -1109,9 +1162,10 @@ export const ProductScreen = ({
       {!detailProductId && user?.role === "farmer" && viewMode === "active" && (
         <TouchableOpacity
           onPress={() => setShowAddModal(true)}
-          className="absolute bottom-[82px] right-5 h-14 w-14 items-center justify-center rounded-full"
+          className="absolute right-5 h-14 w-14 items-center justify-center rounded-full"
           style={{
             backgroundColor: "#14532d",
+            bottom: getFarmerTabBarClearance(insets.bottom),
             elevation: 8,
             shadowColor: "#000",
             shadowOffset: { width: 0, height: 3 },
@@ -1278,6 +1332,12 @@ export const ProductScreen = ({
           </View>
         </View>
       </Modal>
+      <FarmerTutorialVideoModal
+        tutorial="products"
+        title="Product listing tutorial"
+        visible={showProductsTutorial}
+        onClose={() => setShowProductsTutorial(false)}
+      />
     </View>
   );
 };

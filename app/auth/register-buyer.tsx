@@ -14,6 +14,7 @@ import {
 
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import AntDesign from "@expo/vector-icons/AntDesign";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
@@ -22,17 +23,17 @@ import {
   validateDetails,
   validatePasswords,
   getRegisterErrorMessage,
-} from "../../utils/validators";
+} from "@/src/utils/validators";
 import { registerUser } from "../../src/services/authService";
 import { saveUserToFirestore } from "../../src/services/firestoreService";
 import { checkEmailStatus } from "../../src/services/emailStatusService";
 import { resendVerificationByEmail, sendBrandedVerificationEmail } from "../../src/services/emailVerificationService";
 import { uploadValidIDAsync } from "../../src/services/cloudinaryValidIDService";
-import { useToast } from "../../context/ToastContext";
-import { auth } from "../../FirebaseConfig";
+import { useToast } from "@/src/context/ToastContext";
 import { reload, signOut } from "firebase/auth";
 import { doc, getDoc, getDocFromServer } from "firebase/firestore";
-import { db } from "../../FirebaseConfig";
+import { auth, db } from "../../FirebaseConfig";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const normalizeStatus = (value: unknown) =>
   String(value ?? "").trim().toLowerCase();
@@ -74,6 +75,7 @@ const dialogForExistingStatus = (status: string) => {
 
 const RegisterBuyer = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -148,7 +150,7 @@ const RegisterBuyer = () => {
           showToast("No account found for this email. Please submit registration first.");
           setStep(1);
         } else {
-          showToast("Could not resend. Check your connection and try again.");
+          showToast("We couldn't resend the email. Check your internet connection and try again.");
         }
       } finally {
         submitBusyRef.current = false;
@@ -167,7 +169,13 @@ const RegisterBuyer = () => {
         showToast("A new verification link has been sent. Only the newest link works.");
       }
     } catch (error: any) {
-      showToast(getRegisterErrorMessage(error?.code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Resend buyer verification email",
+          getRegisterErrorMessage(error?.code)
+        )
+      );
     } finally {
       submitBusyRef.current = false;
       setLoading(false);
@@ -273,7 +281,7 @@ const RegisterBuyer = () => {
         return;
       }
     } catch (error: any) {
-      console.error("Email verification check failed:", error);
+      getUserFriendlyErrorMessage(error, "Check buyer email verification");
       // Clear the session if the account was removed so registration can restart.
       if (
         error?.code === "auth/user-token-expired" ||
@@ -288,7 +296,7 @@ const RegisterBuyer = () => {
         setStep(1);
         return;
       }
-      showToast("Could not check email verification. Please try again.");
+      showToast("We couldn't check your email yet. Please try again in a moment.");
       setCheckingEmail(false);
       submitBusyRef.current = false;
       return;
@@ -303,8 +311,13 @@ const RegisterBuyer = () => {
         submitBusyRef.current = false;
         return;
       }
-      console.error("Finalize registration failed:", error);
-      showToast(getRegisterErrorMessage(error?.code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Finish buyer registration",
+          getRegisterErrorMessage(error?.code)
+        )
+      );
       // Return to the ID step so another ID can be selected if needed.
       setStep(3);
     } finally {
@@ -507,7 +520,6 @@ const RegisterBuyer = () => {
     } catch (error: any) {
       submitBusyRef.current = false;
       setLoading(false);
-      console.log("Registration error:", error);
       const code = error?.code;
 
       // auth/too-many-requests means Firebase blocked this IP or network, and the
@@ -517,7 +529,13 @@ const RegisterBuyer = () => {
         setSubmitLockedUntil(Date.now() + 180000);
         setFailedSubmits((n) => n + 1);
         setCooldown(60);
-        showToast(getRegisterErrorMessage(code));
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Submit buyer registration",
+            getRegisterErrorMessage(code)
+          )
+        );
         return;
       }
 
@@ -542,7 +560,13 @@ const RegisterBuyer = () => {
       if (code === "auth/invalid-email") {
         setStep(1);
       }
-      showToast(getRegisterErrorMessage(code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Submit buyer registration",
+          getRegisterErrorMessage(code)
+        )
+      );
     }
   };
 
@@ -550,8 +574,11 @@ const RegisterBuyer = () => {
     <View className="flex-1" style={{ backgroundColor: "#14532d" }}>
       <StatusBar barStyle="light-content" backgroundColor="#14532d" />
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+        }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
       <View className="items-center justify-center px-6 py-32">
@@ -568,7 +595,10 @@ const RegisterBuyer = () => {
         </Text>
       </View>
 
-      <View className="flex-1 bg-white rounded-t-[30px] px-5 pt-5 -mt-5" style={{ flexGrow: 1 }}>
+      <View
+        className="flex-1 bg-white rounded-t-[30px] px-5 pt-5 -mt-5"
+        style={{ flexGrow: 1, paddingBottom: insets.bottom + 12 }}
+      >
         <View className="pt-5 mb-10">
           <View className="flex-row items-center justify-between">
             {[
@@ -660,7 +690,6 @@ const RegisterBuyer = () => {
           </Text>
           <View className="flex-row items-center border border-gray-200 rounded-[5px] px-1 mb-4" style={{ minHeight: 50 }}>
             <TextInput
-              key={`password-${showPassword ? "visible" : "hidden"}`}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -675,7 +704,7 @@ const RegisterBuyer = () => {
               onPress={() => setShowPassword((visible) => !visible)}
               className="px-3 py-2"
             >
-              <MaterialCommunityIcons name={showPassword ? "eye-off-outline" : "eye-outline"} size={21} color="#6b7280" />
+              <MaterialCommunityIcons name={showPassword ? "eye-outline" : "eye-off-outline"} size={21} color="#6b7280" />
             </TouchableOpacity>
           </View>
 
@@ -685,7 +714,6 @@ const RegisterBuyer = () => {
 
           <View className="flex-row items-center border border-gray-200 rounded-[5px] px-1 mb-4" style={{ minHeight: 50 }}>
             <TextInput
-              key={`confirm-password-${showConfirmPassword ? "visible" : "hidden"}`}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
@@ -700,7 +728,7 @@ const RegisterBuyer = () => {
               onPress={() => setShowConfirmPassword((visible) => !visible)}
               className="px-3 py-2"
             >
-              <MaterialCommunityIcons name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} size={21} color="#6b7280" />
+              <MaterialCommunityIcons name={showConfirmPassword ? "eye-outline" : "eye-off-outline"} size={21} color="#6b7280" />
             </TouchableOpacity>
           </View>
           <Text className="text-gray-500 text-xs -mt-2 mb-4">
@@ -717,7 +745,7 @@ const RegisterBuyer = () => {
               Open the verification link sent to {email.trim()}, then return here to continue.
             </Text>
             <Text className="text-gray-500 text-xs text-center mt-2 px-4">
-              Only the newest link works — older links show "expired or already used". If you see "already used", just tap "I've verified my email" below.
+              Only the newest link works — older links show &quot;expired or already used&quot;. If you see &quot;already used&quot;, just tap &quot;I&apos;ve verified my email&quot; below.
             </Text>
             <TouchableOpacity
               onPress={handleResendVerification}
@@ -834,7 +862,7 @@ const RegisterBuyer = () => {
             </TouchableOpacity>
           </View>
 
-          <Text className="text-center text-gray-500 mt-6">
+          <Text className="text-center text-gray-500 mt-7">
             Already have an account?{" "}
             <Text
               className="font-semibold"

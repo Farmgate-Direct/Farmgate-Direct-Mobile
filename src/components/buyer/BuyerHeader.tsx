@@ -1,6 +1,5 @@
 // Green header for buyer screens, holding search, cart, and notifications.
-import { Ionicons } from "@expo/vector-icons";
-import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -18,7 +17,7 @@ interface Props {
 }
 
 // Renders the search box next to the cart and notification buttons.
-export default function Header_Buyer({
+export default function BuyerHeader({
   searchQuery = "",
   onSearchChange,
   placeholder = "Search vegetables, fruits…",

@@ -14,7 +14,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFarmerAlert } from "@/context/FarmerAlertContext";
+import { useFarmerAlert } from "@/src/context/FarmerAlertContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 import {
   getPendingGcashEarnings,
@@ -180,6 +183,7 @@ const transactionSign = (transaction: WalletTransaction) => {
 };
 
 export default function FarmerWallet() {
+  const insets = useSafeAreaInsets();
   const router = useRouter();
   const Alert = useFarmerAlert();
 
@@ -265,7 +269,9 @@ export default function FarmerWallet() {
               }, 2500);
             }
           })
-          .catch((e) => console.log("SYNC WITHDRAWALS ERROR:", e));
+          .catch((error) =>
+            getUserFriendlyErrorMessage(error, "Sync farmer withdrawals")
+          );
       }
 
       // Pending earnings take a heavier scan on the server, so they load in the
@@ -276,14 +282,18 @@ export default function FarmerWallet() {
             prev ? { ...prev, pendingBalance: Number(pending || 0) } : prev
           );
         })
-        .catch((e) => console.log("PENDING GCASH ERROR:", e));
+        .catch((error) =>
+          getUserFriendlyErrorMessage(error, "Load pending farmer earnings")
+        );
     } catch (error: any) {
-      console.log("LOAD FARMER WALLET ERROR:", error);
-
       if (isFirstLoad) {
         Alert.alert(
           "Wallet Error",
-          error?.message || "Failed to load your wallet."
+          getUserFriendlyErrorMessage(
+            error,
+            "Load farmer wallet",
+            "We couldn't load your wallet right now. Please try again in a moment."
+          )
         );
       }
     } finally {
@@ -329,8 +339,7 @@ export default function FarmerWallet() {
 
         Alert.alert(
           "Deposit Not Completed",
-          deposit.failureReason ||
-            "The commission reserve deposit was not completed."
+          "The deposit couldn't be completed. Please try again later or contact FarmGate support if the issue continues."
         );
 
         return;
@@ -347,7 +356,7 @@ export default function FarmerWallet() {
         );
       }
     } catch (error) {
-      console.log("CHECK ACTIVE DEPOSIT ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Check farmer deposit status");
     }
   }, [Alert, loadWallet]);
 
@@ -455,10 +464,13 @@ export default function FarmerWallet() {
         "Your GCash payout account is ready for withdrawals."
       );
     } catch (error: any) {
-      console.log("SAVE PAYOUT ACCOUNT ERROR:", error);
       Alert.alert(
         "Save Failed",
-        error?.message || "Failed to save your GCash account."
+        getUserFriendlyErrorMessage(
+          error,
+          "Save farmer payout account",
+          "We couldn't save your GCash account right now. Please try again in a moment."
+        )
       );
     } finally {
       setSavingPayout(false);
@@ -499,13 +511,12 @@ export default function FarmerWallet() {
           await loadWallet();
           Alert.alert(
             "Deposit Not Completed",
-            deposit.failureReason ||
-              "The commission reserve deposit was not completed."
+            "The deposit couldn't be completed. Please try again later or contact FarmGate support if the issue continues."
           );
           return;
         }
       } catch (error) {
-        console.log("DEPOSIT STATUS ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Check farmer deposit status");
       }
 
       if (attempts >= 15) {
@@ -558,10 +569,13 @@ export default function FarmerWallet() {
         "Complete the payment in the opened page, then return to FarmGate."
       );
     } catch (error: any) {
-      console.log("COMMISSION DEPOSIT ERROR:", error);
       Alert.alert(
         "Deposit Failed",
-        error?.message || "Failed to start the commission reserve deposit."
+        getUserFriendlyErrorMessage(
+          error,
+          "Start farmer commission deposit",
+          "We couldn't start your deposit right now. Please try again in a moment."
+        )
       );
     } finally {
       setDepositLoading(false);
@@ -640,29 +654,21 @@ export default function FarmerWallet() {
       } else {
         Alert.alert(
           "Withdrawal Not Completed",
-          withdrawal.failureReason ||
-            "The payout was not completed. Your reserved amount will be released according to the payout status."
+          "The payout wasn't completed. Please check your wallet history before trying again."
         );
       }
     } catch (error: any) {
-      console.log("WITHDRAW ERROR:", error?.details || error);
-
-      // Shows which fields the gateway rejected, when it reported them.
-      const detailText = error?.details
-        ? `\n\nDetails: ${
-            typeof error.details === "string"
-              ? error.details
-              : JSON.stringify(error.details).slice(0, 500)
-          }`
-        : "";
-
       /*
         The request may have reached the server even if the app saw an error
         (for example a timeout), so always re-sync the wallet and history.
       */
       Alert.alert(
         "Withdrawal Failed",
-        `${error?.message || "Failed to create the GCash payout."}${detailText}\n\nPlease check your wallet history before trying again.`
+        `${getUserFriendlyErrorMessage(
+          error,
+          "Request farmer withdrawal",
+          "We couldn't complete your withdrawal right now."
+        )} Please check your wallet history before trying again.`
       );
 
       await loadWallet();
@@ -720,7 +726,10 @@ export default function FarmerWallet() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: 50 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
+        }}
       >
         <View
           className="bg-green-800 rounded-3xl p-6 mb-4"

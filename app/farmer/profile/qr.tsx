@@ -18,7 +18,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useToast } from "@/context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 import QRCode from "react-native-qrcode-svg";
 
@@ -69,10 +70,13 @@ const QR = () => {
         showToast("QR Code saved to gallery.");
 
       } catch (error) {
-
-        console.log(error);
-
-        showToast("Failed to save QR Code.");
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Save farmer QR code",
+            "We couldn't save your QR code. Please check your gallery access and try again."
+          )
+        );
       }
     };
 

@@ -1,11 +1,11 @@
 // Order creation, payments, delivery quotes, and status changes. Anything that
 // touches money or stock runs on the backend, never here.
 import {
-  addDoc,
   collection,
   doc,
   getDoc,
   getDocs,
+  arrayUnion,
   query,
   serverTimestamp,
   updateDoc,
@@ -15,7 +15,7 @@ import {
 import { getAuth } from "firebase/auth";
 import { db } from "../../FirebaseConfig";
 
-import { OrderType, OrderProduct } from "../types/order";
+import type { OrderProduct, OrderType } from "../types/order";
 
 const BACKEND_URL = String(
   process.env.EXPO_PUBLIC_BACKEND_URL || ""
@@ -109,20 +109,6 @@ export const syncOrderPayment = async (
     `/payment-sync/${encodeURIComponent(orderId)}`,
     { method: "POST" }
   );
-
-// Builds a readable order number such as FG-20260117-143005-1234. The random
-// suffix keeps two orders created in the same second apart.
-const generateOrderNumber = () => {
-  const now = new Date();
-
-  const pad = (value: number) => String(value).padStart(2, "0");
-
-  const datePart = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`;
-  const timePart = `${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
-  const random = Math.floor(1000 + Math.random() * 9000);
-
-  return `FG-${datePart}-${timePart}-${random}`;
-};
 
 // Places a new order through the backend. The backend recomputes the delivery
 // fee from the farmer's stored pickup address and the buyer's address, so the
@@ -377,13 +363,15 @@ export const markProductReviewed = async (
     }
 
     const order = snap.data() as OrderType;
-
-    const updatedProducts = (order.products || []).map((product) =>
-      product.productId === productId ? { ...product, reviewed: true } : product
-    );
+    if (
+      order.status !== "delivered" &&
+      order.status !== "claimed"
+    ) {
+      throw new Error("Only completed orders can be reviewed.");
+    }
 
     await updateDoc(ref, {
-      products: updatedProducts,
+      reviewedProductIds: arrayUnion(productId),
       updatedAt: serverTimestamp(),
     });
   } catch (error) {

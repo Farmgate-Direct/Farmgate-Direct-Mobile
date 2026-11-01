@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../FirebaseConfig";
 import { listenChats } from "../../../src/services/chatService";
 import {
@@ -24,6 +25,8 @@ import {
 } from "../../../src/services/notificationService";
 import { NotificationType } from "../../../src/types/notification";
 import { OrderType } from "../../../src/types/order";
+import { getLastChatSenderId } from "../../../src/utils/chatMessage";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 type UiNotif = NotificationType & { _nav?: () => void };
 
@@ -65,6 +68,7 @@ const kindIcon = (kind: string): { name: any; bg: string; color: string } => {
 
 // Main notifications screen with realtime feeds.
 export default function FarmerNotifications() {
+  const insets = useSafeAreaInsets();
   const [farmerId, setFarmerId] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -164,6 +168,16 @@ export default function FarmerNotifications() {
       });
 
     [...chats]
+      .filter((chat) => {
+        const buyerId = (chat.users || []).find(
+          (userId: string) => userId !== farmerId
+        );
+        return (
+          buyerId &&
+          getLastChatSenderId(chat) === buyerId &&
+          Boolean(chat.lastMessage)
+        );
+      })
       .sort(
         (a, b) =>
           toMillis(b.lastMessageTime || b.updatedAt) -
@@ -172,11 +186,11 @@ export default function FarmerNotifications() {
       .slice(0, 10)
       .forEach((c) => {
         items.push({
-        id: `derived-chat-${c.id}`,
+          id: `derived-chat-${c.id}`,
           farmerId,
           kind: "message",
           title: "New message",
-        body: `New message from buyer ${c.otherUserData?.fullName || "buyer"}: ${String(c.lastMessage || "").slice(0, 60)}`,
+          body: `New message from buyer ${c.otherUserData?.fullName || "buyer"}: ${String(c.lastMessage || "").slice(0, 60)}`,
           chatId: c.id,
           read: false,
           createdAt: c.lastMessageTime || c.updatedAt,
@@ -206,7 +220,11 @@ export default function FarmerNotifications() {
     // Delivered, claimed, and cancelled orders become system notices, newest few
     // only.
     orders
-      .filter((o) => ["delivered", "claimed", "cancelled"].includes(o.status))
+      .filter(
+        (o) =>
+          ["delivered", "claimed", "cancelled"].includes(o.status) &&
+          !(o.status === "cancelled" && o.autoCancelled)
+      )
       .slice(0, 5)
       .forEach((o) => {
         items.push({
@@ -265,6 +283,13 @@ export default function FarmerNotifications() {
     }
     if (n.orderId) {
       router.push({ pathname: "/farmer/orders/[id]", params: { id: n.orderId } });
+      return;
+    }
+    if (n.productId) {
+      router.push({
+        pathname: "/farmer/products/[id]",
+        params: { id: n.productId },
+      });
     }
   };
 
@@ -300,7 +325,7 @@ export default function FarmerNotifications() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingBottom: 40,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
         }}
         refreshControl={
           <RefreshControl
@@ -359,11 +384,16 @@ export default function FarmerNotifications() {
                         <Ionicons name={icon.name} size={18} color={icon.color} />
                       </View>
                       <View className="flex-1 ml-3">
+                        {!!(n as UiNotif).title && (
+                          <Text className="text-[13px] font-semibold text-gray-800">
+                            {(n as UiNotif).title}
+                          </Text>
+                        )}
                         <Text
                           className={`text-[13.5px] ${isStoredUnread ? "font-bold text-gray-900" : "text-gray-700"}`}
                           numberOfLines={2}
                         >
-                          {(n as UiNotif).body || (n as UiNotif).title}
+                          {(n as UiNotif).body}
                         </Text>
                         <Text className="text-gray-400 text-[11px] mt-0.5">
                           {timeAgo(n.createdAt)}

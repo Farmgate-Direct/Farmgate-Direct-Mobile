@@ -45,6 +45,13 @@ test("barangay error codes map to clear messages", () => {
   assert.ok(deliveryErrorMessage("INVALID_PROVINCE").includes("Bulacan"));
 });
 
+test("unknown delivery errors use a safe message", () => {
+  assert.equal(
+    deliveryErrorMessage("INTERNAL"),
+    "Delivery isn't available right now. Please try again in a moment."
+  );
+});
+
 test("formatKm/formatPeso peso formatting", () => {
   assert.equal(formatKm(2.5), "2.5 km");
   assert.equal(formatKm(null), "—");

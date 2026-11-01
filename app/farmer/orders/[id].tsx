@@ -9,6 +9,7 @@ import {
 } from "expo-router";
 
 import React, {
+  useCallback,
   useEffect,
   useState,
 } from "react";
@@ -22,8 +23,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useFarmerAlert } from "@/context/FarmerAlertContext";
-import { useToast } from "@/context/ToastContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFarmerAlert } from "@/src/context/FarmerAlertContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 import {
   declineOrder,
@@ -32,11 +35,13 @@ import {
   acceptOrder,
   cancelAcceptedOrderByFarmer,
 } from "@/src/services/orderService";
-import { formatPhilippinePhoneNumber } from "@/utils/validators";
+import { formatPhilippinePhoneNumber } from "@/src/utils/validators";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 // Main order details screen component.
 export default function OrderDetails() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const Alert = useFarmerAlert();
   const { showToast } = useToast();
 
@@ -139,66 +144,47 @@ export default function OrderDetails() {
     }
   };
 
-// Loads one order by its id.
-  const loadOrder =
-    async () => {
-      try {
-        if (!id) {
-          return;
-        }
-
-        const data =
-          await getOrderById(
-            String(id)
-          );
-
-        setOrder(data);
-      } catch (error) {
-        console.log(
-          "LOAD ORDER ERROR:",
-          error
-        );
-
-        showToast("Failed to load order.");
-      } finally {
-        setLoading(false);
+  // Loads one order by its id.
+  const loadOrder = useCallback(async () => {
+    try {
+      if (!id) {
+        return;
       }
-    };
+
+      const data = await getOrderById(String(id));
+      setOrder(data);
+    } catch (error) {
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Load farmer order",
+          "We couldn't load this order. Please try again in a moment."
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [id, showToast]);
 
   // Reads the signed-in farmer from local storage.
-  const loadFarmer =
-    async () => {
-      try {
-        const userStr =
-          await AsyncStorage.getItem(
-            "user"
-          );
-
-        if (!userStr) {
-          return;
-        }
-
-        const user =
-          JSON.parse(userStr);
-
-        setFarmerId(
-          user.uid ||
-            user.userId ||
-            user.id ||
-            ""
-        );
-      } catch (error) {
-        console.log(
-          "LOAD FARMER ERROR:",
-          error
-        );
+  const loadFarmer = useCallback(async () => {
+    try {
+      const userStr = await AsyncStorage.getItem("user");
+      if (!userStr) {
+        return;
       }
-    };
+
+      const user = JSON.parse(userStr);
+      setFarmerId(user.uid || user.userId || user.id || "");
+    } catch (error) {
+      getUserFriendlyErrorMessage(error, "Load farmer profile for order");
+    }
+  }, []);
 
   useEffect(() => {
-    loadOrder();
-    loadFarmer();
-  }, [id]);
+    void loadOrder();
+    void loadFarmer();
+  }, [loadOrder, loadFarmer]);
 
 // Accepts an order that is still pending.
   const handleAccept = async () => {
@@ -221,8 +207,13 @@ export default function OrderDetails() {
           : "Order accepted. Stock will be deducted when processing starts."
       );
     } catch (error: any) {
-      console.log("ACCEPT ORDER ERROR:", error);
-      showToast(error?.message || "Failed to accept order.");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Accept farmer order",
+          "We couldn't accept this order right now. Please try again in a moment."
+        )
+      );
     } finally {
       setActionLoading(false);
     }
@@ -244,8 +235,13 @@ export default function OrderDetails() {
 
       showToast("Order is now being prepared.");
     } catch (error: any) {
-      console.log("PROCESS ORDER ERROR:", error);
-      showToast(error?.message || "Failed to mark the order as processing.");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Start processing farmer order",
+          "We couldn't update this order right now. Please try again in a moment."
+        )
+      );
     } finally {
       setActionLoading(false);
     }
@@ -267,8 +263,13 @@ export default function OrderDetails() {
 
       showToast("Order marked as To Receive.");
     } catch (error: any) {
-      console.log("TO RECEIVE ERROR:", error);
-      showToast(error?.message || "Failed to mark the order as To Receive.");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Mark farmer order ready",
+          "We couldn't update this order right now. Please try again in a moment."
+        )
+      );
     } finally {
       setActionLoading(false);
     }
@@ -304,8 +305,13 @@ export default function OrderDetails() {
             : "Order delivered and farmer wallet updated."
       );
     } catch (error: any) {
-      console.log("DELIVERED ORDER ERROR:", error);
-      showToast(error?.message || "Failed to complete the order.");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Complete farmer order",
+          "We couldn't complete this order right now. Please try again in a moment."
+        )
+      );
     } finally {
       setActionLoading(false);
     }
@@ -342,14 +348,14 @@ export default function OrderDetails() {
 
       Alert.alert(
         "Confirm Cancellation",
-        `Are you sure you want to ${order?.status === "accepted" ? "cancel" : "decline"} this order?\n\nReason:\n${finalReason}`,
+        `Are you sure you want to ${order?.status === "accepted" ? "cancel" : "reject"} this order?\n\nReason:\n${finalReason}`,
         [
           {
             text: "Keep Order",
             style: "cancel",
           },
           {
-            text: order?.status === "accepted" ? "Yes, Cancel" : "Yes, Decline",
+            text: order?.status === "accepted" ? "Yes, Cancel" : "Yes, Reject",
             style: "destructive",
             onPress: () =>
               confirmCancellation(
@@ -395,12 +401,13 @@ export default function OrderDetails() {
 
         showToast("Order cancelled successfully.");
       } catch (error: any) {
-        console.log(
-          "CANCEL ORDER ERROR:",
-          error
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Cancel farmer order",
+            "We couldn't cancel this order right now. Please try again in a moment."
+          )
         );
-
-        showToast(error?.message || "Failed to cancel the order.");
       } finally {
         setActionLoading(false);
       }
@@ -445,11 +452,18 @@ export default function OrderDetails() {
       <View className="flex-1 bg-[#fafafa] px-4 pt-5">
 
         <ScrollView
+          className="flex-1"
           showsVerticalScrollIndicator={
             false
           }
           contentContainerStyle={{
-            paddingBottom: 30,
+            paddingBottom:
+              !actionLoading &&
+              !["pending", "accepted", "processing", "to_receive"].includes(
+                order.status
+              )
+                ? getFarmerScreenBottomPadding(insets.bottom)
+                : 16,
           }}
         >
 
@@ -654,6 +668,13 @@ export default function OrderDetails() {
                 {order.cancelReason ||
                   "No reason provided"}
               </Text>
+
+              {order.autoCancelled && (
+                <Text className="mb-3 rounded-md bg-white px-3 py-2 text-sm text-gray-700">
+                  {order.autoCancellationMessage ||
+                    "This order was automatically cancelled because the farmer did not accept it within 2 days."}
+                </Text>
+              )}
 
               <Text className="text-xs font-medium text-gray-500">
                 Cancelled Date
@@ -911,96 +932,120 @@ export default function OrderDetails() {
 
         </ScrollView>
 
-        {!actionLoading && order.status === "pending" && (
-          <View className="flex-row border-t border-gray-100 bg-[#fafafa] pb-5 pt-2">
-            <TouchableOpacity
-              onPress={openCancelModal}
-              className="mr-2 flex-1 rounded-[10px] border border-red-200 bg-white py-3.5"
-            >
-              <Text className="text-center font-bold text-red-600">Decline</Text>
-            </TouchableOpacity>
+        {(actionLoading ||
+          ["pending", "accepted", "processing", "to_receive"].includes(
+            order.status
+          )) && (
+          <View
+            className="border-t border-gray-100 bg-[#fafafa] pt-2"
+            style={{ paddingBottom: insets.bottom + 8 }}
+          >
+          {!actionLoading && order.status === "pending" && (
+            <View className="flex-row">
+              <TouchableOpacity
+                onPress={openCancelModal}
+                className="mr-2 flex-1 rounded-[10px] border border-red-200 bg-white py-3.5"
+              >
+                <View className="items-center justify-center">
+                  <Text className="text-center text-base font-bold text-red-600">Reject</Text>
+                  <Text className="text-center text-[10px] text-red-500">(Tanggihan)</Text>
+                </View>
+              </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={handleAccept}
-              className="ml-2 flex-1 rounded-[10px] bg-[#14532d] py-3.5"
-            >
-              <Text className="text-center font-bold text-white">Accept</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {!actionLoading && order.status === "accepted" && (
-          <>
-            {order.payment === "gcash" && order.paymentStatus !== "paid" && (
-              <View className="mt-4 rounded-[10px] border border-amber-200 bg-amber-50 p-3">
-                <Text className="text-yellow-800 text-sm font-semibold">
-                  Waiting for the buyer to complete the GCash payment.
-                </Text>
-              </View>
-            )}
-
-            <View className="flex-row border-t border-gray-100 bg-[#fafafa] pb-5 pt-2">
-              {!(order.payment === "gcash" && order.paymentStatus === "paid") && (
-                <TouchableOpacity
-                  onPress={openCancelModal}
-                  className="mr-2 flex-1 rounded-[10px] border border-red-200 bg-white py-3.5"
-                >
-                  <Text className="text-center font-bold text-red-600">Cancel Order</Text>
-                </TouchableOpacity>
-              )}
-
-              {(order.payment === "cod" || order.paymentStatus === "paid") && (
-                <TouchableOpacity
-                  onPress={handleProcessing}
-                  className={`flex-1 rounded-[10px] bg-[#14532d] py-3.5 ${
-                    order.payment === "gcash" && order.paymentStatus === "paid" ? "" : "ml-2"
-                  }`}
-                >
-                  <Text className="text-center font-bold text-white">Mark as Processing</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                onPress={handleAccept}
+                className="ml-2 flex-1 rounded-[10px] bg-[#14532d] py-3.5"
+              >
+                <View className="items-center justify-center">
+                  <Text className="text-center font-bold text-white">Accept</Text>
+                  <Text className="text-center text-[10px] text-white/80">(Tanggapin)</Text>
+                </View>
+              </TouchableOpacity>
             </View>
-          </>
-        )}
+          )}
 
-        {!actionLoading && order.status === "processing" && (
-          <View className="border-t border-gray-100 bg-[#fafafa] pb-5 pt-2">
+          {!actionLoading && order.status === "accepted" && (
+            <>
+              {order.payment === "gcash" && order.paymentStatus !== "paid" && (
+                <View className="rounded-[10px] border border-amber-200 bg-amber-50 p-3">
+                  <Text className="text-yellow-800 text-sm font-semibold">
+                    Waiting for the buyer to complete the GCash payment.
+                  </Text>
+                </View>
+              )}
+
+              <View
+                className={`flex-row ${
+                  order.payment === "gcash" && order.paymentStatus !== "paid"
+                    ? "mt-2.5"
+                    : ""
+                }`}
+              >
+                {!(order.payment === "gcash" && order.paymentStatus === "paid") && (
+                  <TouchableOpacity
+                    onPress={openCancelModal}
+                    className="mr-2 flex-1 rounded-[10px] border border-red-200 bg-white py-3.5"
+                  >
+                    <View className="items-center justify-center">
+                      <Text className="text-center font-bold text-red-600">Cancel Order</Text>
+                      <Text className="text-center text-[10px] text-red-500">(Kanselahin ang Order)</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                {(order.payment === "cod" || order.paymentStatus === "paid") && (
+                  <TouchableOpacity
+                    onPress={handleProcessing}
+                    className={`flex-1 rounded-[10px] bg-[#14532d] py-3.5 ${
+                      order.payment === "gcash" && order.paymentStatus === "paid" ? "" : "ml-2"
+                    }`}
+                  >
+                    <View className="items-center justify-center">
+                      <Text className="text-center font-bold text-white">Mark as Processing</Text>
+                      <Text className="text-center text-[10px] text-white/80">(Markahan bilang Pinoproseso)</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </>
+          )}
+
+          {!actionLoading && order.status === "processing" && (
             <TouchableOpacity
               onPress={handleToReceive}
               activeOpacity={0.8}
               className="rounded-[10px] bg-purple-700 py-3.5"
             >
-              <Text className="text-center font-bold text-white">Mark as To Receive</Text>
+              <View className="items-center justify-center">
+                <Text className="text-center font-bold text-white">Mark as To Receive</Text>
+                <Text className="text-center text-[10px] text-white/80">(Markahan bilang Para sa Pagkuha)</Text>
+              </View>
             </TouchableOpacity>
-          </View>
-        )}
+          )}
 
-        {!actionLoading && order.status === "to_receive" && (
-          <View className="border-t border-gray-100 bg-[#fafafa] pb-5 pt-2">
+          {!actionLoading && order.status === "to_receive" && (
             <TouchableOpacity
               onPress={handleDelivered}
               activeOpacity={0.8}
               className="rounded-[10px] bg-[#14532d] py-3.5"
             >
-              <Text className="text-center font-bold text-white">
-                {order.delivery === "pickup" ? "Mark as Claimed" : "Mark as Delivered"}
-              </Text>
+              <View className="items-center justify-center">
+                <Text className="text-center font-bold text-white">
+                  {order.delivery === "pickup" ? "Mark as Claimed" : "Mark as Delivered"}
+                </Text>
+                <Text className="text-center text-[10px] text-white/80">
+                  {order.delivery === "pickup" ? "(Markahan bilang Natanggap)" : "(Markahan bilang Nadeliver)"}
+                </Text>
+              </View>
             </TouchableOpacity>
-          </View>
-        )}
+          )}
 
-        {actionLoading && (
-
-          <View className="mt-4 items-center rounded-[10px] bg-white py-4">
-
-            <ActivityIndicator
-              color="#14532d"
-            />
-
-            <Text className="text-gray-600 mt-2">
-              Updating order...
-            </Text>
-
+          {actionLoading && (
+            <View className="items-center rounded-[10px] bg-white py-4">
+              <ActivityIndicator color="#14532d" />
+              <Text className="mt-2 text-gray-600">Updating order...</Text>
+            </View>
+          )}
           </View>
         )}
 
@@ -1027,7 +1072,7 @@ export default function OrderDetails() {
             <View className="w-10 h-1 bg-gray-300 rounded-full self-center mb-5" />
 
             <Text className="text-xl font-bold text-gray-900">
-              {order.status === "accepted" ? "Cancel Order" : "Decline Order"}
+              {order.status === "accepted" ? "Cancel Order" : "Reject Order"}
             </Text>
 
             <Text className="text-gray-500 mt-1 mb-5">

@@ -8,10 +8,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // Renders the cover photo and sends the user to login when Get Started is tapped.
 const Index = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   return (
     <View className="flex-1 bg-green-700">
@@ -20,7 +22,10 @@ const Index = () => {
         resizeMode="cover"
          source={require("../assets/Farmgate-logos/starting-page.jpg")}
       >
-        <View className="bg-white rounded-t-[30px] px-5 pt-10 pb-6 items-center">
+        <View
+          className="bg-white rounded-t-[30px] px-5 pt-10 pb-6 items-center"
+          style={{ paddingBottom: 24 + insets.bottom }}
+        >
           <Image
             className="w-14 h-14 mb-3"
             resizeMode="contain"

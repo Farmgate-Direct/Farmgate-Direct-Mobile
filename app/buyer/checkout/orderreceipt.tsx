@@ -24,16 +24,16 @@ import {
 } from "react-native";
 
 import {
-  collection,
   doc,
   getDoc,
 } from "firebase/firestore";
 
 import { db } from "@/FirebaseConfig";
-import { formatPhilippinePhoneNumber } from "@/utils/validators";
+import { formatPhilippinePhoneNumber } from "@/src/utils/validators";
 import { OrderType } from "@/src/types/order";
 import { cancelOrder } from "@/src/services/orderService";
-import { useToast } from "@/context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const buyerCancelReasons = [
   "Changed my mind",
@@ -72,9 +72,9 @@ export default function OrderReceipt() {
   const params = useLocalSearchParams();
   const showBackButton = firstParam(params.from) === "orders";
 
-  const orderIds = parseJSON<string[]>(
-    params.orderIds,
-    []
+  const orderIds = useMemo(
+    () => parseJSON<string[]>(params.orderIds, []),
+    [params.orderIds]
   );
 
   const [orders, setOrders] =
@@ -120,7 +120,7 @@ export default function OrderReceipt() {
           user.uid || user.userId || user.id || ""
         );
       } catch (error) {
-        console.log("LOAD BUYER ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Load buyer profile for order receipt");
       }
     };
 
@@ -163,9 +163,9 @@ export default function OrderReceipt() {
                     ...snap.data(),
                   } as OrderType;
                 } catch (error) {
-                  console.log(
-                    "LOAD THANK YOU ORDER ERROR:",
-                    error
+                  getUserFriendlyErrorMessage(
+                    error,
+                    "Load buyer order receipt"
                   );
 
                   return null;
@@ -194,7 +194,7 @@ export default function OrderReceipt() {
     return () => {
       mounted = false;
     };
-  }, [orderIds.join(",")]);
+  }, [orderIds]);
 
   const overallSubTotal = useMemo(
     () =>
@@ -324,10 +324,12 @@ export default function OrderReceipt() {
 
       router.replace("/buyer/profile/orders");
     } catch (error: any) {
-      console.log("CANCEL ORDER ERROR:", error);
       showToast(
-        error?.message ||
-          "Something went wrong while cancelling the order."
+        getUserFriendlyErrorMessage(
+          error,
+          "Cancel checkout order",
+          "We couldn't cancel your order right now. Please try again in a moment."
+        )
       );
     } finally {
       setCancelling(false);
@@ -668,7 +670,7 @@ export default function OrderReceipt() {
             ) : (
               <View className="rounded-xl p-4" style={{ backgroundColor: "#f0fdf4" }}>
                 <Text className="font-bold" style={{ color: DARK_GREEN }}>
-                  Pickup from the farmer's farm
+                  Pickup from the farmer&apos;s farm
                 </Text>
 
                 <Text className="text-gray-600 text-sm mt-3">

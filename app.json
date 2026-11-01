@@ -7,6 +7,12 @@
     "icon": "./assets/images/icon.png",
     "scheme": "client",
     "userInterfaceStyle": "automatic",
+    "androidNavigationBar": {
+      "barStyle": "dark-content",
+      "backgroundColor": "#F3F4F6",
+      "borderColor": "#CBD5E1",
+      "enforceContrast": true
+    },
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true

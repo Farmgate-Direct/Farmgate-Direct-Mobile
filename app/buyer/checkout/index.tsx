@@ -19,6 +19,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Ionicons } from "@expo/vector-icons";
 
@@ -34,8 +35,8 @@ import {
 } from "firebase/firestore";
 
 import { db } from "@/FirebaseConfig";
-import { formatPhilippinePhoneNumber } from "@/utils/validators";
-import { useAppAlert } from "@/context/FarmerAlertContext";
+import { formatPhilippinePhoneNumber } from "@/src/utils/validators";
+import { useAppAlert } from "@/src/context/FarmerAlertContext";
 
 import {
   createOrder,
@@ -44,7 +45,8 @@ import {
 
 import {
   deliveryErrorMessage,
-} from "@/utils/deliveryFee";
+} from "@/src/utils/deliveryFee";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 import {
   removeCartItem,
@@ -53,7 +55,11 @@ import {
 import {
   normalizeEggVariant,
   eggVariantToBaseQuantity,
-} from "@/constants/productCatalog";
+} from "@/src/constants/productCatalog";
+import {
+  FARMER_CONTENT_BOTTOM_GAP,
+  getFarmerScreenBottomPadding,
+} from "@/src/constants/farmerLayout";
 
 // CONSTANTS
 
@@ -63,6 +69,7 @@ const DARK_GREEN =
 // COMPONENT
 
 export default function Checkout() {
+  const insets = useSafeAreaInsets();
   const Alert = useAppAlert();
   const {
     buyerId,
@@ -197,10 +204,7 @@ export default function Checkout() {
       } catch (
         error
       ) {
-        console.log(
-          "CART PARSE ERROR:",
-          error
-        );
+        getUserFriendlyErrorMessage(error, "Load buyer checkout cart");
 
         setCart(
           []
@@ -291,10 +295,7 @@ export default function Checkout() {
             } catch (
               error
             ) {
-              console.log(
-                "LOAD USER ADDRESS ERROR:",
-                error
-              );
+              getUserFriendlyErrorMessage(error, "Load buyer checkout address");
             }
           };
 
@@ -427,7 +428,7 @@ export default function Checkout() {
           if (!r?.success) {
             next[String(r.key)] = {
               status: "error",
-              message: deliveryErrorMessage(r.code, r.error),
+              message: deliveryErrorMessage(r.code),
               code: r.code,
             };
           } else {
@@ -447,19 +448,18 @@ export default function Checkout() {
         for (const farm of activeFarms) {
           const fid = String(farm?.farmerId || "");
           if (fid && !next[fid]) {
-            next[fid] = { status: "error", message: deliveryErrorMessage(undefined, "Missing quote for this farm.") };
+            next[fid] = { status: "error", message: deliveryErrorMessage() };
           }
         }
         setQuotes(next);
       } catch (e: any) {
         if (cancelled) return;
-        const msg = String(e?.message || "Delivery is not available for this address.");
         const failed: Record<string, FarmQuote> = {};
         for (const farm of activeFarms) {
           if (farm?.farmerId) {
             failed[String(farm.farmerId)] = {
               status: "error",
-              message: deliveryErrorMessage(e?.code, msg),
+              message: deliveryErrorMessage(e?.code),
               code: e?.code,
             };
           }
@@ -878,15 +878,13 @@ export default function Checkout() {
       } catch (
         error: any
       ) {
-        console.log(
-          "PLACE ORDER ERROR:",
-          error
-        );
-
         Alert.alert(
           "Order Error",
-          error?.message ||
-            "Something went wrong while creating your order."
+          getUserFriendlyErrorMessage(
+            error,
+            "Create buyer order",
+            "We couldn't place your order right now. Please try again in a moment."
+          )
         );
       } finally {
         setLoading(false);
@@ -922,8 +920,7 @@ export default function Checkout() {
     >
       <ScrollView
         contentContainerStyle={{
-          paddingBottom:
-            140,
+          paddingBottom: FARMER_CONTENT_BOTTOM_GAP,
         }}
         showsVerticalScrollIndicator={
           false
@@ -1007,7 +1004,7 @@ export default function Checkout() {
 
               <View className="bg-blue-50 border border-blue-100 p-4 rounded-[10px]">
                 <Text className="text-blue-900 font-bold text-base">
-                  Pickup from the farmer's farm
+                  Pickup from the farmer&apos;s farm
                 </Text>
 
                 <Text className="text-gray-500 text-sm mt-3">
@@ -1067,7 +1064,7 @@ export default function Checkout() {
                             Delivery unavailable
                           </Text>
                           <Text className="mt-0.5 text-xs text-red-600">
-                            {deliveryErrorMessage(q.code, q.message)}
+                            {deliveryErrorMessage(q.code)}
                           </Text>
                         </View>
                       );
@@ -1484,7 +1481,7 @@ export default function Checkout() {
                 </Text>
                 {quoteErrors.map(({ farm, quote }: any) => (
                   <Text key={`err-${farm?.farmerId}`} className="mt-1 text-xs text-amber-800">
-                    {farm?.farmName}: {deliveryErrorMessage((quote as any)?.code, (quote as any)?.message)}
+                    {farm?.farmName}: {deliveryErrorMessage((quote as any)?.code)}
                   </Text>
                 ))}
                 {!quoting && (
@@ -1517,7 +1514,10 @@ export default function Checkout() {
       </ScrollView>
 
 
-      <View className="bg-white border-t border-gray-200 p-4">
+      <View
+        className="bg-white border-t border-gray-200 p-4"
+        style={{ paddingBottom: getFarmerScreenBottomPadding(insets.bottom) }}
+      >
         <TouchableOpacity
           onPress={
             placeOrder

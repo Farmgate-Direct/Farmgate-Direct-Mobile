@@ -24,6 +24,7 @@ import {
 import {
   Ionicons,
 } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import {
   getFarmerOrders,
@@ -32,6 +33,9 @@ import {
 import {
   OrderType,
 } from "@/src/types/order";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerTabBarClearance } from "@/src/constants/farmerLayout";
+import FarmerTutorialVideoModal from "@/src/components/FarmerTutorialVideoModal";
 
 const filters = [
   "All",
@@ -48,6 +52,7 @@ const filters = [
 // Main orders screen with status filters.
 export default function Orders() {
 
+  const insets = useSafeAreaInsets();
   const router =
     useRouter();
   const { filter } = useLocalSearchParams<{ filter?: string }>();
@@ -60,6 +65,8 @@ export default function Orders() {
 
   const [activeFilter, setActiveFilter] =
     useState("All");
+  const [showOrdersTutorial, setShowOrdersTutorial] =
+    useState(false);
 
   useEffect(() => {
     if (filter && filters.includes(filter)) {
@@ -115,10 +122,7 @@ export default function Orders() {
 
       } catch (error) {
 
-        console.log(
-          "FETCH FARMER ORDERS ERROR:",
-          error
-        );
+        getUserFriendlyErrorMessage(error, "Load farmer orders");
 
       } finally {
 
@@ -252,11 +256,19 @@ const filteredOrders =
   return (
     <View className="flex-1 bg-[#f5f5f5]">
 
-      <View className="bg-green-900 pt-14 pb-4 px-5 rounded-b-2xl flex-row items-center">
-
-        <Text className="text-white font-bold text-lg ml-4">
+      <View className="bg-green-900 pt-14 pb-4 px-5 rounded-b-2xl flex-row items-center justify-between">
+        <Text className="text-white font-bold text-lg">
           Orders
         </Text>
+        <TouchableOpacity
+          onPress={() => setShowOrdersTutorial(true)}
+          className="h-10 w-10 items-center justify-center"
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityLabel="Open orders tutorial"
+        >
+          <Ionicons name="play-circle-outline" size={25} color="white" />
+        </TouchableOpacity>
 
       </View>
 
@@ -337,7 +349,7 @@ const filteredOrders =
 
           contentContainerStyle={{
             paddingTop: 4,
-            paddingBottom: 112,
+            paddingBottom: getFarmerTabBarClearance(insets.bottom),
             flexGrow:
               filteredOrders.length ===
               0
@@ -564,6 +576,12 @@ const filteredOrders =
 
       </View>
 
+      <FarmerTutorialVideoModal
+        tutorial="orders"
+        title="Orders tutorial"
+        visible={showOrdersTutorial}
+        onClose={() => setShowOrdersTutorial(false)}
+      />
     </View>
   );
 }

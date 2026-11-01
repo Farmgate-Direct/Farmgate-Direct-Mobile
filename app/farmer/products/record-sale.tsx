@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import { ProductType } from "../../../src/types/product";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 type Props = {
   visible: boolean;
@@ -45,20 +46,30 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
     const qty = Number(quantity);
 
     if (!quantity || qty <= 0) {
-      setError("Ilagay ang tamang quantity.");
+      setError("Please enter a valid quantity.");
       return;
     }
 
     if (product && qty > product.stock) {
       setError(
-        `Lampas ito sa kasalukuyang available na stock (${product.stock} ${product.unit}).`
+        `This exceeds the current available stock (${product.stock} ${product.unit}).`
       );
       return;
     }
 
     setError("");
-    await onConfirm(qty);
-    resetForm();
+    try {
+      await onConfirm(qty);
+      resetForm();
+    } catch (error) {
+      setError(
+        getUserFriendlyErrorMessage(
+          error,
+          "Record farmer walk-in sale",
+          "We couldn't record this sale right now. Please try again in a moment."
+        )
+      );
+    }
   };
 
   if (!product) return null;
@@ -85,9 +96,9 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
             </Text>
           </View>
           <Text className="mb-4 text-sm leading-5 text-gray-500">
-            Para sa mga binili nang direkta sa farm (hindi dumaan sa app).
-            Awtomatikong babawasan ang stock gamit ang FIFO (pinakamatandang
-            batch muna) - kagaya rin ng ginagamit sa online orders.
+            For products sold directly at the farm without using the app. Stock is
+            automatically reduced using FIFO (oldest batch first), the same logic used
+            for online orders.
           </Text>
 
           <View className="mb-4 rounded-[10px] bg-gray-50 px-4 py-3">
@@ -106,7 +117,7 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
           ) : null}
 
           <Text className="mb-1 text-xs font-semibold text-gray-600">
-            QUANTITY NA NABENTA ({product.unit})
+            SOLD QUANTITY ({product.unit})
           </Text>
           <TextInput
             value={quantity}
@@ -125,7 +136,10 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
               }}
               className="mr-2 flex-1 items-center rounded-[10px] border border-[#14532d] py-3"
             >
-              <Text className="font-semibold text-[#14532d]">Cancel</Text>
+              <View className="items-center justify-center">
+                <Text className="font-semibold text-[#14532d]">Cancel</Text>
+                <Text className="text-[10px] text-[#14532d]">(Kanselahin)</Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -139,7 +153,10 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="text-white font-bold">Record Sale</Text>
+                <View className="items-center justify-center">
+                  <Text className="text-white font-bold">Record Sale</Text>
+                  <Text className="text-[10px] text-white/80">(Itala ang Benta)</Text>
+                </View>
               )}
             </TouchableOpacity>
           </View>

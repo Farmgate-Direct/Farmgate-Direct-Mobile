@@ -1,10 +1,10 @@
 // Root layout. Wraps every screen in the shared providers and declares the
 // screens the navigator knows about.
 import "./global.css";
-import { CartProvider } from "@/context/CartContext";
+import { CartProvider } from "@/src/context/CartContext";
 import { Stack } from "expo-router";
-import { ToastProvider } from "@/context/ToastContext";
-import { FarmerAlertProvider } from "@/context/FarmerAlertContext";
+import { ToastProvider } from "@/src/context/ToastContext";
+import { FarmerAlertProvider } from "@/src/context/FarmerAlertContext";
 
 export default function RootLayout() {
   return (

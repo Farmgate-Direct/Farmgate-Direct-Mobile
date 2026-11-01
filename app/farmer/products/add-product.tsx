@@ -24,7 +24,7 @@ import { db } from "../../../FirebaseConfig";
 import {
   getProductVideoValidationError,
   MAX_PRODUCT_IMAGES,
-} from "../../../constants/productMedia";
+} from "@/src/constants/productMedia";
 import {
   CATEGORIES,
   PRODUCT_CATALOG,
@@ -37,7 +37,8 @@ import {
   isFullTrayUnit,
   EGG_HALF_PCS,
   EGG_FULL_PCS,
-} from "../../../constants/productCatalog";
+} from "@/src/constants/productCatalog";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 // Department of Agriculture reference price, synced into Firestore by
 // scripts-automation/da-sync through a GitHub workflow into the
@@ -327,10 +328,10 @@ const AddProductModal = ({
           setPrice(batch.price.toString());
           const batchDate = (batch as any).weekStart ?? batch.createdAt;
           setNotice(
-            `Batch ${String(batch.batchNumber).padStart(3, "0")} (${formatDate(batchDate)}) - ${batch.stock} ${match.unit} available, status: ${batch.status}. Piliin sa ibaba kung idadagdag dito o gagawa ng bagong batch.`
+            `Batch ${String(batch.batchNumber).padStart(3, "0")} (${formatDate(batchDate)}) - ${batch.stock} ${match.unit} available, status: ${batch.status}. Choose below whether to add to this batch or create a new one.`
           );
         } else {
-          setNotice("Unang harvest para sa produktong ito - gagawa ng unang batch.");
+          setNotice("This is the first harvest for this product — creating the first batch.");
         }
       } else {
         setMatchedProduct(null);
@@ -418,7 +419,7 @@ const AddProductModal = ({
         setDaPriceRaw(fetched);
         setDaPrice(adjustDaPriceForUnit(name, unit, fetched));
       } catch (err) {
-        console.error("[DA PRICE] Failed to get DA reference from Firestore:", err);
+        getUserFriendlyErrorMessage(err, "Load farmer reference prices");
         if (!cancelled) setDaPrice(null);
         if (!cancelled) setDaPriceRaw(null);
       } finally {
@@ -586,7 +587,7 @@ const AddProductModal = ({
   const handleSave = async () => {
     if (archivedDuplicate) {
       setError(
-        `May naka-archive ka nang "${archivedDuplicate.name}". I-unarchive muna ito bago magdagdag ng bagong harvest.`
+        `You already have an archived "${archivedDuplicate.name}". Unarchive it first before adding a new harvest.`
       );
       return;
     }
@@ -624,8 +625,14 @@ const AddProductModal = ({
       await onSave(input, Number(quantity), Number(price), forceNewBatch);
       resetForm();
       onClose();
-    } catch (err: any) {
-      setError(err?.message || "May error na naganap. Subukan muli.");
+    } catch (err) {
+      setError(
+        getUserFriendlyErrorMessage(
+          err,
+          "Save farmer harvest",
+          "We couldn't save this harvest right now. Please try again in a moment."
+        )
+      );
     }
   };
 
@@ -642,12 +649,12 @@ const AddProductModal = ({
             {archivedDuplicate ? (
               <View className="mb-4 rounded-[10px] border border-orange-300 bg-orange-50 px-4 py-3">
                 <Text className="text-orange-700 text-xs font-semibold mb-1">
-                  May naka-archive ka nang produktong ito
+                  You already have an archived product with this name
                 </Text>
                 <Text className="text-orange-700 text-xs">
-                  Naka-archive na si &quot;{archivedDuplicate.name}&quot; ({archivedDuplicate.category}).
-                  Pumunta sa &quot;Archived&quot; tab sa listing at i-unarchive muna ito bago ka
-                  makapag-dagdag ng bagong harvest.
+                  &quot;{archivedDuplicate.name}&quot; ({archivedDuplicate.category}) is archived.
+                  Go to the &quot;Archived&quot; tab in the listing and unarchive it before adding a
+                  new harvest.
                 </Text>
               </View>
             ) : notice ? (
@@ -676,7 +683,7 @@ const AddProductModal = ({
             {showBatchChoice && currentBatch && (
               <View className="mb-4">
                 <Text className="text-xs text-gray-500 mb-2">
-                  ANO ANG GAGAWIN SA BAGONG ANI?
+                  WHAT WOULD YOU LIKE TO DO WITH THIS NEW HARVEST?
                 </Text>
                 <View className="flex-row gap-2">
                   <TouchableOpacity
@@ -692,7 +699,7 @@ const AddProductModal = ({
                         !forceNewBatch ? "text-white" : "text-gray-700"
                       }`}
                     >
-                      Idagdag sa Batch {String(currentBatch.batchNumber).padStart(3, "0")}
+                      Add to Batch {String(currentBatch.batchNumber).padStart(3, "0")}
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -708,15 +715,15 @@ const AddProductModal = ({
                         forceNewBatch ? "text-white" : "text-gray-700"
                       }`}
                     >
-                      Gumawa ng Bagong Batch
+                      Create New Batch
                     </Text>
                   </TouchableOpacity>
                 </View>
                 {forceNewBatch && (
                   <Text className="text-orange-600 text-[10px] mt-2">
-                    Magiging &quot;Out of Stock&quot; ang Batch{" "}
-                    {String(currentBatch.batchNumber).padStart(3, "0")} (kahit may natitira pang
-                    stock) - ang bagong batch na lang ang makikita/mabibili ng buyer.
+                    Batch {String(currentBatch.batchNumber).padStart(3, "0")} will become
+                    &quot;Out of Stock&quot; (even if stock remains) — only the new batch will be
+                    visible and buyable to buyers.
                   </Text>
                 )}
               </View>
@@ -734,9 +741,9 @@ const AddProductModal = ({
                 </View>
                 {category === "Egg & Poultry" && !isExistingProduct && (
                   <Text className="text-gray-400 text-[10px] mt-1">
-                    Ilista mo ang presyo at bilang kada full tray (30 pcs).
-                    Si buyer na ang pipili sa shop kung half tray (15 pcs)
-                    o full tray — automatic ang presyo (half = kalahati).
+                    Enter the price and quantity per full tray (30 pcs). Buyers will
+                    choose half tray (15 pcs) or full tray in the shop — the price is
+                    calculated automatically (half = half price).
                   </Text>
                 )}
               </View>
@@ -767,10 +774,10 @@ const AddProductModal = ({
             {eggFarmerHelper && (
               <View className="mb-2 rounded-[10px] border border-green-200 bg-green-50 px-4 py-3">
                 <Text className="text-green-800 text-xs font-semibold mb-1">
-                  Kwenta sa presyo mo (₱{Number(price).toLocaleString()} per {unit.replace(/^per\s+/i, "")}):
+                  Your price breakdown (₱{Number(price).toLocaleString()} per {unit.replace(/^per\s+/i, "")}):
                 </Text>
                 <Text className="text-green-800 text-xs">
-                  • Bawat itlog: ₱{formatEggPeso(eggFarmerHelper.perPc)}{"\n"}• Half tray (15 eggs): ₱{formatEggPeso(eggFarmerHelper.halfTray)}{"\n"}• Full tray (30 eggs): ₱{formatEggPeso(eggFarmerHelper.fullTray)}
+                  • Each egg: ₱{formatEggPeso(eggFarmerHelper.perPc)}{"\n"}• Half tray (15 eggs): ₱{formatEggPeso(eggFarmerHelper.halfTray)}{"\n"}• Full tray (30 eggs): ₱{formatEggPeso(eggFarmerHelper.fullTray)}
                 </Text>
               </View>
             )}
@@ -781,10 +788,10 @@ const AddProductModal = ({
             {isEggProduct(name) && (
               <View className="mb-2 rounded-[10px] border border-amber-200 bg-amber-50 px-4 py-3">
                 <Text className="text-amber-800 text-xs font-semibold mb-1">
-                  Egg calculator (tulong sa pag-compute)
+                  Egg calculator
                 </Text>
                 <Text className="text-xs text-gray-500 mb-1">
-                  PRESYO BAWAT ITLOG (₱)
+                  PRICE PER EGG (₱)
                 </Text>
                 <TextInput
                   value={eggCalcPc}
@@ -807,7 +814,7 @@ const AddProductModal = ({
                           className="items-center rounded-[5px] bg-[#14532d] py-3"
                         >
                           <Text className="text-white text-xs font-semibold">
-                            Gamitin: ₱{Number(eggCalcResult.fullTray).toLocaleString()} per tray
+                            Use: ₱{Number(eggCalcResult.fullTray).toLocaleString()} per tray
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -815,7 +822,7 @@ const AddProductModal = ({
                   </View>
                 ) : (
                   <Text className="text-gray-400 text-[10px]">
-                    Mag-type ng presyo bawat itlog para makita ang half/full tray.
+                    Enter the price per egg to see the half/full tray values.
                   </Text>
                 )}
               </View>
@@ -826,7 +833,7 @@ const AddProductModal = ({
                 <View className="flex-row items-center">
                   <ActivityIndicator size="small" color="#2563EB" />
                   <Text className="text-gray-500 text-xs ml-2">
-                    Kinukuha ang latest DA market reference...
+                    Fetching the latest DA market reference...
                   </Text>
                 </View>
               </View>
@@ -844,7 +851,7 @@ const AddProductModal = ({
                 {eggTraySuggestion && (
                   <View className="mt-2 rounded-[8px] bg-blue-100/60 px-3 py-2">
                     <Text className="text-blue-800 text-xs font-semibold mb-1">
-                      Kwenta sa tray (batay sa ₱{Number(eggTraySuggestion.perPc).toLocaleString()} bawat itlog):
+                      Tray estimate (based on ₱{Number(eggTraySuggestion.perPc).toLocaleString()} per egg):
                     </Text>
                     <Text className="text-blue-800 text-xs">
                       • Half tray (15 eggs): ₱{Number(eggTraySuggestion.halfTray).toLocaleString()}{"\n"}• Full tray (30 eggs): ₱{Number(eggTraySuggestion.fullTray).toLocaleString()}
@@ -852,17 +859,17 @@ const AddProductModal = ({
                   </View>
                 )}
                 <Text className="text-blue-600 text-[10px]">
-                  Reference lang ito mula sa Department of Agriculture
+                  This is only a reference from the Department of Agriculture
                   {daPrice.lastUpdated?.toDate
                     ? ` (updated ${daPrice.lastUpdated.toDate().toLocaleDateString()})`
                     : ""}
-                  . Malaya kang magtakda ng sarili mong selling price.
+                  . You are free to set your own selling price.
                 </Text>
               </View>
             ) : name ? (
               <View className="mb-2 rounded-[10px] border border-gray-200 bg-gray-50 px-4 py-3">
                 <Text className="text-gray-500 text-xs">
-                  Walang available na DA reference para sa produktong ito sa ngayon.
+                  There is no available DA reference for this product right now.
                 </Text>
               </View>
             ) : null}
@@ -872,11 +879,10 @@ const AddProductModal = ({
                 <View className="flex-row items-start">
                   <Ionicons name="warning" size={16} color="#C2410C" />
                   <Text className="text-orange-700 text-xs ml-2 flex-1">
-                    Ang inilagay mong presyo ay mas mataas kaysa sa latest
-                    suggested market price mula sa Department of Agriculture (DA).
-                    {"\n\n"}
-                    Reference lang ang DA price — maaari mo pa ring ituloy ang
-                    pag-post gamit ang sarili mong presyo.
+                    Your entered price is higher than the latest suggested market
+                    price from the Department of Agriculture (DA).{"\n\n"}
+                    The DA price is only a reference — you can still continue posting
+                    using your own price.
                   </Text>
                 </View>
               </View>
@@ -886,20 +892,20 @@ const AddProductModal = ({
                 whether that is a full tray, a half tray, or a kilo. For eggs
                 the total number of pieces is shown as well. */}
             <Text className="text-xs text-gray-500 mb-1">
-              HARVEST QUANTITY (dami ng inani ngayon)
+              HARVEST QUANTITY
             </Text>
             <Text className="text-gray-400 text-[11px] mb-1">
               {isEggProduct(name) && isFullTrayUnit(unit)
-                ? "Ilang full tray (30 pcs bawat isa) ang inani mo?"
+                ? "How many full trays (30 pcs each) did you harvest?"
                 : isEggProduct(name) && isHalfTrayUnit(unit)
-                  ? "Ilang half tray (15 pcs bawat isa) ang inani mo?"
-                  : `Ilang ${unit.replace(/^per\s+/i, "")} ang inani mo?`}
+                  ? "How many half trays (15 pcs each) did you harvest?"
+                  : `How many ${unit.replace(/^per\s+/i, "")} units did you harvest?`}
             </Text>
             <TextInput
               value={quantity}
               onChangeText={handleQuantityChange}
               keyboardType="numeric"
-              placeholder="Hal. 50"
+              placeholder="Ex. 50"
               className="mb-1 rounded-[10px] border border-gray-300 bg-gray-100 px-4 py-3 text-gray-800"
             />
             {isEggProduct(name) &&
@@ -907,7 +913,7 @@ const AddProductModal = ({
             quantity !== "" &&
             Number(quantity) > 0 ? (
               <Text className="text-green-700 text-xs mb-4 mt-1">
-                Kabuuang itlog:{" "}
+                Total eggs:{" "}
                 {(
                   Number(quantity) *
                   (isHalfTrayUnit(unit) ? EGG_HALF_PCS : EGG_FULL_PCS)
@@ -935,7 +941,7 @@ const AddProductModal = ({
             )}
             {isExistingProduct && (
               <Text className="text-gray-400 text-[10px] mb-4">
-                Shared info ito ng produkto - gamitin ang &quot;Edit Product&quot; para baguhin.
+                This product shares its information — use &quot;Edit Product&quot; to change it.
               </Text>
             )}
             {!isExistingProduct && <View className="mb-3" />}
@@ -1107,7 +1113,7 @@ const AddProductModal = ({
             )}
             {isExistingProduct && (
               <Text className="text-gray-400 text-[10px] mb-6">
-                Shared media ito ng produkto - gamitin ang &quot;Edit Product&quot; para baguhin.
+                This product shares its media — use &quot;Edit Product&quot; to change it.
               </Text>
             )}
             {!isExistingProduct && <View className="mb-5" />}
@@ -1120,7 +1126,10 @@ const AddProductModal = ({
                 }}
                 className="w-[48%] items-center rounded-[10px] border border-[#14532d] py-3"
               >
-                <Text className="font-semibold text-[#14532d]">Cancel</Text>
+                <View className="items-center justify-center">
+                  <Text className="font-semibold text-[#14532d]">Cancel</Text>
+                  <Text className="text-[10px] text-[#14532d]">(Kanselahin)</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -1135,7 +1144,10 @@ const AddProductModal = ({
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-white font-bold">Save</Text>
+                  <View className="items-center justify-center">
+                    <Text className="text-white font-bold">Save</Text>
+                    <Text className="text-[10px] text-white/80">(I-save)</Text>
+                  </View>
                 )}
               </TouchableOpacity>
             </View>

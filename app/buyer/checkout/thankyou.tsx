@@ -6,17 +6,17 @@ import {
   useLocalSearchParams,
 } from "expo-router";
 
-import { useMemo } from "react";
-
 import {
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { formatPhilippinePhoneNumber } from "@/utils/validators";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { formatPhilippinePhoneNumber } from "@/src/utils/validators";
 
 export default function ThankYou() {
+  const insets = useSafeAreaInsets();
 
   const {
     delivery,
@@ -203,7 +203,10 @@ export default function ThankYou() {
         </View>
       </ScrollView>
 
-      <View className="absolute bottom-0 left-0 right-0 bg-white p-4">
+      <View
+        className="absolute bottom-0 left-0 right-0 bg-white p-4"
+        style={{ paddingBottom: 16 + insets.bottom }}
+      >
 
         <TouchableOpacity
           onPress={() =>

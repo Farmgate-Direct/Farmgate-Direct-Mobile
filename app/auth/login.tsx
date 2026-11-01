@@ -20,7 +20,8 @@ import { signOut } from "firebase/auth";
 import { loginUser } from "../../src/services/authService";
 import { doc, getDoc, getDocFromServer } from "firebase/firestore";
 import { auth, db } from "../../FirebaseConfig";
-import { useToast } from "../../context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 // Reads the user document from the server so the approval status is current,
 // and falls back to the cached copy when the device is offline.
@@ -46,7 +47,7 @@ const getAuthErrorMessage = (code?: string) => {
     case "auth/too-many-requests":
       return "Too many attempts. Please try again later.";
     case "auth/network-request-failed":
-      return "Network error. Check your connection.";
+      return "Check your internet connection and try again.";
     default:
       return "Something went wrong. Please try again.";
   }
@@ -185,7 +186,13 @@ const Login = () => {
         );
       }
     } catch (error: any) {
-      showToast(getAuthErrorMessage(error?.code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Buyer or farmer sign in",
+          getAuthErrorMessage(error?.code)
+        )
+      );
     } finally {
       setLoading(false);
     }
@@ -272,7 +279,7 @@ const Login = () => {
                 className="px-1 py-2"
               >
                 <MaterialCommunityIcons
-                  name={showPassword ? "eye-off-outline" : "eye-outline"}
+                  name={showPassword ? "eye-outline" : "eye-off-outline"}
                   size={21}
                   color="#6b7280"
                 />

@@ -10,15 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  BuyerNotif,
-  useBuyerNotifications,
-} from "../../../src/hooks/UseBuyerNotification";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useBuyerNotifications } from "../../../src/hooks/useBuyerNotifications";
+import type { BuyerNotification } from "../../../src/types/notification";
 import {
   groupNotificationsByDay,
   timeAgo,
   toMillis,
 } from "../../../src/services/notificationService";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 const kindIcon = (kind: string): { name: any; bg: string; color: string } => {
   switch (kind) {
@@ -34,6 +34,7 @@ const kindIcon = (kind: string): { name: any; bg: string; color: string } => {
 };
 
 export default function BuyerNotifications() {
+  const insets = useSafeAreaInsets();
   const { items, loading, lastSeen, seenLoaded, markSeen } =
     useBuyerNotifications();
   const [refreshing, setRefreshing] = useState(false);
@@ -57,7 +58,7 @@ export default function BuyerNotifications() {
   const groups = useMemo(() => groupNotificationsByDay(items as any), [items]);
 
 // Open chat or order details from a notification.
-  const handlePress = (n: BuyerNotif) => {
+  const handlePress = (n: BuyerNotification) => {
     if (n.kind === "message") {
       if (!n.farmerId) return;
       router.push({
@@ -108,7 +109,7 @@ export default function BuyerNotifications() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           paddingHorizontal: 16,
-          paddingBottom: 40,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
         }}
         refreshControl={
           <RefreshControl
@@ -140,7 +141,7 @@ export default function BuyerNotifications() {
               )}
               <View className="px-1">
                 {g.data.map((item: any) => {
-                  const n = item as BuyerNotif;
+                  const n = item as BuyerNotification;
                   const icon = kindIcon(n.kind);
                   const isNew = toMillis(n.createdAt) > baseline;
                   return (
@@ -157,6 +158,9 @@ export default function BuyerNotifications() {
                         <Ionicons name={icon.name} size={18} color={icon.color} />
                       </View>
                       <View className="flex-1 ml-3">
+                        <Text className="text-[13px] font-semibold text-gray-800">
+                          {n.title}
+                        </Text>
                         <Text
                           className={`text-[13.5px] ${isNew ? "font-bold text-gray-900" : "text-gray-700"}`}
                           numberOfLines={2}

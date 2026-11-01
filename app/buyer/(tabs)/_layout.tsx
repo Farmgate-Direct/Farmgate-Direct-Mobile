@@ -10,10 +10,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   BuyerUnreadChatsProvider,
   useBuyerUnreadChats,
-} from "../../../src/hooks/BuyerUnreadChats";
+} from "@/src/hooks/useBuyerUnreadChats";
+import {
+  BUYER_TAB_BAR_HEIGHT,
+  BUYER_TAB_BAR_LIFT,
+} from "@/src/constants/buyerLayout";
 
 // Tab order: Home, Shop, QR, Message, Profile. Only the QR tab is marked center.
 const TABS = [
@@ -28,12 +33,17 @@ const TABS = [
 function CustomTabBar() {
   const router   = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const active   = segments[segments.length - 1] ?? "home";
   const { unreadChatIds } = useBuyerUnreadChats();
 
   return (
-    <View style={styles.barWrapper}>
-      <View style={styles.bar}>
+    <View style={[styles.barWrapper, { height: BAR_H + LIFT + insets.bottom }]}>
+      <View
+        pointerEvents="none"
+        style={[styles.systemNavigationArea, { height: insets.bottom }]}
+      />
+      <View style={[styles.bar, { bottom: insets.bottom }]}>
         {TABS.map((tab) => {
           const focused = active === tab.name;
 
@@ -70,7 +80,7 @@ function CustomTabBar() {
                 <Ionicons
                   name={(focused ? tab.icon : `${tab.icon}-outline`) as any}
                   size={23}
-                  color={focused ? "#14532d" : "#9ca3af"}
+                  color={focused ? "#14532d" : "#6b7280"}
                 />
                 {tab.name === "message" && unreadChatIds.size > 0 && (
                   <View style={styles.unreadTabDot} />
@@ -89,10 +99,10 @@ function CustomTabBar() {
 
 // The bar is taller on iOS because of the home indicator, and the QR circle is
 // lifted above the bar.
-const BAR_H   = Platform.OS === "ios" ? 80 : 64;
+const BAR_H   = BUYER_TAB_BAR_HEIGHT;
 const PAD_BOT = Platform.OS === "ios" ? 20 : 0;
 const CIRCLE  = 58;
-const LIFT    = 20;
+const LIFT    = BUYER_TAB_BAR_LIFT;
 
 const styles = StyleSheet.create({
   barWrapper: {
@@ -102,6 +112,15 @@ const styles = StyleSheet.create({
     right:         0,
     height:        BAR_H + LIFT,
     pointerEvents: "box-none",
+  },
+  systemNavigationArea: {
+    position:        "absolute",
+    bottom:          0,
+    left:            0,
+    right:           0,
+    backgroundColor: "#f3f4f6",
+    borderTopWidth:  1,
+    borderTopColor:  "#cbd5e1",
   },
   bar: {
     position:        "absolute",
@@ -153,7 +172,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize:   10,
-    color:      "#9ca3af",
+    color:      "#6b7280",
     fontWeight: "400",
   },
   labelActive: {

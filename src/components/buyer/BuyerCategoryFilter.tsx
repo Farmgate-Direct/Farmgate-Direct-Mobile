@@ -20,7 +20,7 @@ interface Props {
 }
 
 // Renders the filter icons and highlights the active category.
-export default function Category_Buyer({ activeCategory, onSelectCategory }: Props) {
+export default function BuyerCategoryFilter({ activeCategory, onSelectCategory }: Props) {
   return (
     <FlatList
       data={CATEGORIES}

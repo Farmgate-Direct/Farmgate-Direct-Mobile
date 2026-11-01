@@ -31,6 +31,9 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../../../FirebaseConfig";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 import {
   getBuyerOrders,
@@ -58,6 +61,7 @@ export default function BuyerOrders() {
 
   const router =
     useRouter();
+  const insets = useSafeAreaInsets();
 
   const [orders, setOrders] =
     useState<OrderType[]>([]);
@@ -220,11 +224,7 @@ export default function BuyerOrders() {
         );
 
       } catch (error) {
-
-        console.log(
-          "FETCH BUYER ORDERS ERROR:",
-          error
-        );
+        getUserFriendlyErrorMessage(error, "Load buyer orders");
 
       } finally {
 
@@ -276,7 +276,8 @@ export default function BuyerOrders() {
       order.products || []
     ).filter(
       (product) =>
-        !product.reviewed
+        !product.reviewed &&
+        !order.reviewedProductIds?.includes(product.productId)
     ).length;
   };
 
@@ -396,8 +397,41 @@ export default function BuyerOrders() {
       </View>
 
       <View className="flex-1 px-4">
+        <View className="mb-3 pt-4">
+          <FlatList
+            data={filters}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item}
+            contentContainerStyle={{
+              paddingRight: 20,
+            }}
+            renderItem={({ item }) => {
+              const isActive = activeFilter === item;
 
-        {/* The list scrolls with the filter chips so they do not take up screen space. */}
+              return (
+                <TouchableOpacity
+                  onPress={() => setActiveFilter(item)}
+                  className={`mr-2 items-center justify-center rounded-full border px-4 py-2.5 ${
+                    isActive
+                      ? "border-[#14532d] bg-[#14532d]"
+                      : "border-gray-200 bg-white"
+                  }`}
+                  style={{ minWidth: 82 }}
+                >
+                  <Text
+                    className={`text-sm font-semibold ${
+                      isActive ? "text-white" : "text-gray-600"
+                    }`}
+                  >
+                    {getStatusLabel(item)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </View>
+
         <FlatList
           data={
             filteredOrders
@@ -416,69 +450,13 @@ export default function BuyerOrders() {
           }
 
           contentContainerStyle={{
-            paddingBottom: 20,
+            paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
             flexGrow:
               filteredOrders.length ===
               0
                 ? 1
                 : 0,
           }}
-
-          ListHeaderComponent={
-            <View className="mb-3 mt-4">
-
-              <FlatList
-                data={filters}
-                horizontal
-                showsHorizontalScrollIndicator={
-                  false
-                }
-                keyExtractor={(item) =>
-                  item
-                }
-                contentContainerStyle={{
-                  paddingRight: 20,
-                  gap: 8,
-                }}
-                renderItem={({
-                  item,
-                }) => {
-
-                  const isActive =
-                    activeFilter ===
-                    item;
-
-                  return (
-                    <TouchableOpacity
-                      onPress={() =>
-                        setActiveFilter(
-                          item
-                        )
-                      }
-                      className={`px-4 py-2 rounded-full ${
-                        isActive
-                          ? "bg-green-900"
-                          : "bg-gray-100"
-                      }`}
-                    >
-
-                      <Text
-                        className={`font-semibold text-xs capitalize ${
-                          isActive
-                            ? "text-white"
-                            : "text-gray-600"
-                        }`}
-                      >
-                        {getStatusLabel(item)}
-                      </Text>
-
-                    </TouchableOpacity>
-                  );
-                }}
-              />
-
-            </View>
-          }
 
           ListEmptyComponent={
             <View className="mt-24 items-center">
@@ -566,7 +544,7 @@ export default function BuyerOrders() {
                     },
                   });
                 }}
-                className="mb-3 rounded-2xl border border-gray-200 bg-white p-4"
+                className="mb-4 rounded-2xl border border-gray-200 bg-white p-4"
               >
 
                 <View className="flex-row items-start justify-between">

@@ -2,8 +2,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
-import { useToast } from "../../../context/ToastContext";
-import { useAppAlert } from "@/context/FarmerAlertContext";
+import { useToast } from "@/src/context/ToastContext";
+import { useAppAlert } from "@/src/context/FarmerAlertContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  BUYER_TAB_BAR_HEIGHT,
+  getBuyerTabBarContentClearance,
+} from "@/src/constants/buyerLayout";
+import { FARMER_CONTENT_BOTTOM_GAP } from "@/src/constants/farmerLayout";
 import React, { useCallback, useState } from "react";
 import { getBatchesByProduct } from "@/src/services/productService";
 
@@ -25,7 +32,7 @@ import {
 import {
   groupCartByFarmer,
   FarmerCart,
-} from "../../../utils/groupCartByFarmer";
+} from "@/src/utils/groupCartByFarmer";
 
 import { CartItem } from "@/src/types/cart";
 
@@ -34,7 +41,7 @@ import {
   baseStockToVariantStock,
   normalizeEggVariant,
   eggVariantLabel,
-} from "@/constants/productCatalog";
+} from "@/src/constants/productCatalog";
 
 // Get the base-unit quantity for stock math. Without a variant, quantity is already the base amount.
 const baseQtyOf = (p: any): number => {
@@ -53,6 +60,7 @@ const maxQtyOf = (p: any, baseStock: number | null): number => {
 
 export default function Cart() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
   const Alert = useAppAlert();
   const [cartItems, setCartItems] = useState<FarmerCart[]>([]);
@@ -70,14 +78,8 @@ export default function Cart() {
     name: string;
   } | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadCart();
-    }, [])
-  );
-
 // Load cart items for this buyer.
-  const loadCart = async () => {
+  const loadCart = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -112,7 +114,8 @@ export default function Cart() {
                   b.status === "Available")
               .reduce((sum, b) => sum + b.stock, 0);
             return [productId, available] as const;
-          } catch {
+          } catch (error) {
+            getUserFriendlyErrorMessage(error, "Load cart product stock");
             return [productId, null] as const;
           }
         })
@@ -121,21 +124,35 @@ export default function Cart() {
       setStockMap(Object.fromEntries(stockEntries));
 
     } catch (error) {
-      console.log(error);
-      Alert.alert("Error", "Failed to load cart");
+      Alert.alert(
+        "Cart unavailable",
+        getUserFriendlyErrorMessage(
+          error,
+          "Load buyer cart",
+          "We couldn't load your cart. Please try again in a moment."
+        )
+      );
     } finally {
       setLoading(false);
     }
 
-  };
+  }, [Alert, router]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadCart();
+    }, [loadCart])
+  );
 
   const toggleItemSelection = (docId: string) => {
     setSelectedItems((prev) => {
       const copy = new Set(prev);
 
-      copy.has(docId)
-        ? copy.delete(docId)
-        : copy.add(docId);
+      if (copy.has(docId)) {
+        copy.delete(docId);
+      } else {
+        copy.add(docId);
+      }
 
       return copy;
     });
@@ -219,9 +236,16 @@ export default function Cart() {
 
   try {
     await updateCartQuantity(product.docId, newQty, newBase);
-  } catch {
+  } catch (error) {
     updateLocalQty(farmerId, docId, product.quantity);
-    Alert.alert("Error updating quantity");
+    Alert.alert(
+      "Couldn't update quantity",
+      getUserFriendlyErrorMessage(
+        error,
+        "Increase cart item quantity",
+        "We couldn't update this quantity. Please try again."
+      )
+    );
   }
 
   
@@ -247,14 +271,21 @@ export default function Cart() {
 
     try {
       await updateCartQuantity(product.docId, newQty, newBase);
-    } catch {
+    } catch (error) {
       updateLocalQty(
         farmerId,
         docId,
         product.quantity
       );
 
-      Alert.alert("Error updating quantity");
+      Alert.alert(
+        "Couldn't update quantity",
+        getUserFriendlyErrorMessage(
+          error,
+          "Decrease cart item quantity",
+          "We couldn't update this quantity. Please try again."
+        )
+      );
     }
   };
 
@@ -295,10 +326,17 @@ export default function Cart() {
 
     try {
       await removeCartItem(product.docId);
-    } catch {
+    } catch (error) {
       setCartItems(backup);
 
-      Alert.alert("Error removing item");
+      Alert.alert(
+        "Couldn't remove item",
+        getUserFriendlyErrorMessage(
+          error,
+          "Remove buyer cart item",
+          "We couldn't remove this item. Please try again."
+        )
+      );
     }
   };
 
@@ -358,7 +396,10 @@ export default function Cart() {
 
             return { productId, ...requested, available };
           } catch (error) {
-            console.log("CHECKOUT STOCK CHECK ERROR:", productId, error);
+            getUserFriendlyErrorMessage(
+              error,
+              "Verify stock before buyer checkout"
+            );
             return { productId, ...requested, available: null };
           }
         })
@@ -406,10 +447,13 @@ ${message}`
 
       return true;
     } catch (error: any) {
-      console.log("CHECKOUT STOCK VALIDATION ERROR:", error);
       Alert.alert(
         "Unable to Verify Stock",
-        error?.message || "FarmGate could not verify the selected products."
+        getUserFriendlyErrorMessage(
+          error,
+          "Validate buyer cart stock",
+          "We couldn't check product availability right now. Please try again in a moment."
+        )
       );
       return false;
     } finally {
@@ -485,13 +529,19 @@ ${message}`
         keyExtractor={(f) => f.farmerId}
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: 110,
+          paddingBottom:
+            getBuyerTabBarContentClearance(
+              insets.bottom,
+              FARMER_CONTENT_BOTTOM_GAP
+            ) + 72,
         }}
-        renderItem={({ item: farm }) => (
-          <View
-            className="rounded-[10px] mb-4 p-4"
-            style={{ backgroundColor: "#ffffff" }}
-          >
+        renderItem={({ item: farm, index }) => (
+            <View
+              className={`rounded-[10px] p-4 ${
+                index < cartItems.length - 1 ? "mb-4" : ""
+              }`}
+              style={{ backgroundColor: "#ffffff" }}
+            >
 
             <View className="flex-row items-center mb-2">
 
@@ -641,7 +691,12 @@ ${message}`
         )}
       />
 
-      <View className="absolute bottom-[60px] left-0 right-0 bg-white border-t border-gray-200 flex-row items-stretch">
+      <View
+        className="absolute left-0 right-0 bg-white border-t border-gray-200 flex-row items-stretch"
+        style={{
+          bottom: BUYER_TAB_BAR_HEIGHT + insets.bottom,
+        }}
+      >
         <View className="flex-1 justify-center px-4 py-5">
           <Text className="text-lg font-bold">
             Total: ₱{totalPrice.toFixed(2)}
@@ -670,7 +725,7 @@ ${message}`
                   selectedItems.has(p.docId!)
                 ),
               }))
-              .filter((f) => f.products.length > 0);
+              .filter((farm) => farm.products.length > 0);
 
             router.push({
               pathname: "/buyer/checkout",

@@ -11,8 +11,12 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../FirebaseConfig";
 import { listenChats } from "../../../src/services/chatService";
+import { getLastChatSenderId } from "../../../src/utils/chatMessage";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { FARMER_TAB_BAR_HEIGHT } from "@/src/constants/farmerLayout";
 
 const TABS = [
   {
@@ -66,6 +70,7 @@ const getTimestampMillis = (value: any): number => {
 function CustomTabBar() {
   const router = useRouter();
   const segments = useSegments();
+  const insets = useSafeAreaInsets();
   const active = segments[segments.length - 1] ?? "home";
   const [farmerId, setFarmerId] = useState("");
   const [orders, setOrders] = useState<any[]>([]);
@@ -100,7 +105,7 @@ function CustomTabBar() {
         setOrdersSeenAt(Number(ordersSeen) || 0);
         setSeenMarkersLoaded(true);
       } catch (error) {
-        console.error("FARMER TAB INDICATOR SETUP ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Load farmer tab indicators");
         if (!cancelled) setSeenMarkersLoaded(true);
       }
     };
@@ -123,12 +128,12 @@ useEffect(() => {
       (snapshot) => {
         setOrders(snapshot.docs.map((item) => item.data()));
       },
-      (error) => console.error("FARMER TAB ORDERS INDICATOR ERROR:", error)
+      (error) => getUserFriendlyErrorMessage(error, "Load farmer order indicators")
     );
     const unsubscribeChats = listenChats(
       farmerId,
       setChats,
-      (error) => console.error("FARMER TAB MESSAGES INDICATOR ERROR:", error)
+      (error) => getUserFriendlyErrorMessage(error, "Load farmer message indicators")
     );
 
     return () => {
@@ -145,7 +150,7 @@ useEffect(() => {
       setOrdersSeenAt(now);
       AsyncStorage.setItem(`farmer-orders-seen-${farmerId}`, String(now)).catch(
         (error) =>
-          console.error("SAVE FARMER ORDERS SEEN MARKER ERROR:", error)
+          getUserFriendlyErrorMessage(error, "Save farmer order read status")
       );
     }
   }, [active, farmerId, seenMarkersLoaded]);
@@ -156,11 +161,7 @@ useEffect(() => {
       getTimestampMillis(order.createdAt) > ordersSeenAt
   ).length;
   const newMessagesCount = chats.filter((chat) => {
-    const lastSender =
-      chat.lastSenderId ??
-      chat.lastMessageSenderId ??
-      chat.lastSender ??
-      chat.senderId;
+    const lastSender = getLastChatSenderId(chat);
     const lastReadAt = chat.lastReadAt?.[farmerId];
     return (
       (!lastSender || lastSender !== farmerId) &&
@@ -170,57 +171,81 @@ useEffect(() => {
   }).length;
 
   return (
-    <View style={styles.bar}>
-      {TABS.map((tab) => {
-        const focused = active === tab.name;
-        const indicatorCount =
-          tab.name === "order"
-            ? newOrdersCount
-            : tab.name === "message"
-              ? newMessagesCount
-              : 0;
+    <View style={[styles.barWrapper, { height: BAR_H + insets.bottom }]}>
+      <View
+        pointerEvents="none"
+        style={[styles.systemNavigationArea, { height: insets.bottom }]}
+      />
+      <View style={[styles.bar, { bottom: insets.bottom }]}>
+        {TABS.map((tab) => {
+          const focused = active === tab.name;
+          const indicatorCount =
+            tab.name === "order"
+              ? newOrdersCount
+              : tab.name === "message"
+                ? newMessagesCount
+                : 0;
 
-        return (
-          <TouchableOpacity
-            key={tab.name}
-            onPress={() => router.push(tab.href)}
-            style={styles.item}
-            activeOpacity={0.75}
-            accessibilityRole="button"
-            accessibilityLabel={
-              indicatorCount > 0
-                ? `${tab.label}, ${indicatorCount} new`
-                : tab.label
-            }
-          >
-            <View style={styles.iconWrap}>
-              <Ionicons
-                name={focused ? tab.icon : tab.outlineIcon}
-                size={23}
-                color={focused ? "#14532d" : "#9ca3af"}
-              />
-              {seenMarkersLoaded && indicatorCount > 0 && (
-                <View style={styles.indicator}>
-                  <Text style={styles.indicatorText}>
-                    {indicatorCount > 9 ? "9+" : indicatorCount}
-                  </Text>
-                </View>
-              )}
-            </View>
-            <Text style={[styles.label, focused && styles.labelActive]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              onPress={() => router.push(tab.href)}
+              style={styles.item}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={
+                indicatorCount > 0
+                  ? `${tab.label}, ${indicatorCount} new`
+                  : tab.label
+              }
+            >
+              <View style={styles.iconWrap}>
+                <Ionicons
+                  name={focused ? tab.icon : tab.outlineIcon}
+                  size={23}
+                  color={focused ? "#14532d" : "#6b7280"}
+                />
+                {seenMarkersLoaded && indicatorCount > 0 && (
+                  <View style={styles.indicator}>
+                    <Text style={styles.indicatorText}>
+                      {indicatorCount > 9 ? "9+" : indicatorCount}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              <Text style={[styles.label, focused && styles.labelActive]}>
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
-const BAR_H = Platform.OS === "ios" ? 80 : 64;
+const BAR_H = FARMER_TAB_BAR_HEIGHT;
 const PAD_BOT = Platform.OS === "ios" ? 20 : 0;
 
 const styles = StyleSheet.create({
+  barWrapper: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: BAR_H,
+    pointerEvents: "box-none",
+    backgroundColor: "#ffffff",
+  },
+  systemNavigationArea: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#f3f4f6",
+    borderTopWidth: 1,
+    borderTopColor: "#cbd5e1",
+  },
   bar: {
     position: "absolute",
     bottom: 0,
@@ -275,7 +300,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 10,
-    color: "#9ca3af",
+    color: "#6b7280",
     fontWeight: "400",
   },
   labelActive: {

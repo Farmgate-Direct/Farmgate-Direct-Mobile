@@ -11,15 +11,21 @@ import {
   View,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import ProductCard from "@/components/ProductCard";
-import Header_Buyer from "@/components/Header_Buyer";
-import Category_Buyer from "@/components/Category_Filter";
+import ProductCard from "@/src/components/buyer/ProductCard";
+import BuyerHeader from "@/src/components/buyer/BuyerHeader";
+import BuyerCategoryFilter from "@/src/components/buyer/BuyerCategoryFilter";
 import { ProductType } from "@/src/types/product";
 import { subscribeToProducts } from "@/src/services/productService";
 import { getCartByBuyer } from "@/src/services/cartService";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  FARMER_CONTENT_BOTTOM_GAP,
+} from "@/src/constants/farmerLayout";
+import { getBuyerTabBarContentClearance } from "@/src/constants/buyerLayout";
 
 const SORT_OPTIONS = [
   { label: "All", icon: "options-outline" },
@@ -28,8 +34,8 @@ const SORT_OPTIONS = [
 ];
 
 export default function Shop() {
-  const router = useRouter();
 
+  const insets = useSafeAreaInsets();
   const [products, setProducts] = useState<ProductType[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState("All");
@@ -75,7 +81,7 @@ export default function Shop() {
             cartItems.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0)
           );
         } catch (error) {
-          console.log("SHOP CART COUNT ERROR:", error);
+          getUserFriendlyErrorMessage(error, "Load buyer cart count");
         }
       };
       loadCartCount();
@@ -123,17 +129,22 @@ export default function Shop() {
         keyExtractor={(item, index) => item.docId ?? index.toString()}
         numColumns={2}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{
+          paddingBottom: getBuyerTabBarContentClearance(
+            insets.bottom,
+            FARMER_CONTENT_BOTTOM_GAP
+          ),
+        }}
         columnWrapperStyle={{ justifyContent: "space-between", paddingHorizontal: 14 }}
         ListHeaderComponent={
           <>
-            <Header_Buyer
+            <BuyerHeader
               cartCount={cartCount}
               searchQuery={searchQuery}
               onSearchChange={setSearchQuery}
             />
 
-            <Category_Buyer activeCategory={activeCategory} onSelectCategory={setActiveCategory} />
+            <BuyerCategoryFilter activeCategory={activeCategory} onSelectCategory={setActiveCategory} />
 
             <View className="flex-row justify-end items-center mb-2 px-4">
               <TouchableOpacity

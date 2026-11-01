@@ -16,7 +16,6 @@ import React, {
 
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Text,
   TouchableOpacity,
@@ -29,11 +28,15 @@ import {
   setDefaultAddress,
 } from "../../../src/services/addressService";
 
-import { useToast } from "../../../context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 const AddressScreen = () => {
 
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const { showToast } = useToast();
 
@@ -43,17 +46,13 @@ const AddressScreen = () => {
 
   const [user, setUser] = useState<any>(null);
 
-  const [refreshing, setRefreshing] = useState(false);
-
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // Reads the saved addresses of the buyer. A background refresh keeps the list
   // visible instead of showing the full-screen loader.
   const loadAddresses = async (isBackgroundRefresh = false) => {
     try {
-      if (isBackgroundRefresh) {
-        setRefreshing(true);
-      } else {
+      if (!isBackgroundRefresh) {
         setLoading(true);
       }
 
@@ -69,10 +68,9 @@ const AddressScreen = () => {
 
       setAddresses(data);
     } catch (error) {
-      console.log(error);
+      getUserFriendlyErrorMessage(error, "Load buyer addresses");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
@@ -89,8 +87,13 @@ const AddressScreen = () => {
       await loadAddresses(true); // ← background refresh, no full-screen blocker
       showToast("Default address updated");
     } catch (error) {
-      console.log(error);
-      showToast("Failed to update default address");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Update buyer default address",
+          "We couldn't update your default address. Please try again."
+        )
+      );
     }
   };
 
@@ -105,7 +108,13 @@ const AddressScreen = () => {
       await deleteAddress(deleteTargetId);
       await loadAddresses(true);
     } catch (error) {
-      console.log(error);
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Delete buyer address",
+          "We couldn't delete this address. Please try again."
+        )
+      );
     } finally {
       setDeleteTargetId(null);
     }
@@ -186,7 +195,7 @@ const AddressScreen = () => {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{
               padding: 16,
-              paddingBottom: 120,
+              paddingBottom: getFarmerScreenBottomPadding(insets.bottom) + 72,
             }}
             renderItem={({ item }) => (
 
@@ -311,9 +320,10 @@ const AddressScreen = () => {
 
         <TouchableOpacity
           activeOpacity={0.85}
-          className="absolute bottom-6 left-5 right-5 py-4 rounded-[5px] items-center"
+          className="absolute left-5 right-5 py-4 rounded-[5px] items-center"
           style={{
             backgroundColor: "#14532d",
+            bottom: getFarmerScreenBottomPadding(insets.bottom),
             elevation: 4,
             shadowColor: "#14532d",
             shadowOpacity: 0.25,

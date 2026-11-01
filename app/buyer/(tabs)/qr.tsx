@@ -22,8 +22,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useAppAlert } from "@/context/FarmerAlertContext";
+import { useAppAlert } from "@/src/context/FarmerAlertContext";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 export default function QRScanner() {
   const Alert = useAppAlert();
@@ -55,7 +56,7 @@ export default function QRScanner() {
     try {
       await Linking.openSettings();
     } catch (error) {
-      console.error("OPEN CAMERA SETTINGS ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Open camera settings");
       Alert.alert(
         "Unable to Open Settings",
         "Please open your device settings and allow FarmGate to use the camera."
@@ -71,7 +72,7 @@ const requestCameraAccess = async () => {
       setDeniedCanAskAgain(result.canAskAgain);
       setDeniedModalVisible(true);
     } catch (error) {
-      console.error("REQUEST CAMERA PERMISSION ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Request buyer camera permission");
       Alert.alert(
         "Camera Permission Error",
         "FarmGate couldn't request camera access. Please try again."
@@ -253,11 +254,6 @@ const requestCameraAccess = async () => {
 
     scanningRef.current = true;
 
-    console.log(
-      "SCANNED:",
-      data
-    );
-
     // A farm code looks like client://farm/abc123.
     if (
       data.startsWith(
@@ -270,11 +266,6 @@ const requestCameraAccess = async () => {
           "client://farm/",
           ""
         );
-
-      console.log(
-        "FARMER ID:",
-        farmerId
-      );
 
       router.push({
         pathname:

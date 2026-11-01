@@ -13,30 +13,27 @@ import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { getSavedFarms, unsaveFarm } from "@/src/services/savedFarmService";
-import { useToast } from "@/context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 const DARK_GREEN = "#14532d";
 
 const SavedFarmsScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
   const [farms, setFarms] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedFarmerId, setSelectedFarmerId] = useState<string | null>(null);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadFarms();
-    }, [])
-  );
-
   const loadFarms = useCallback(async () => {
     try {
       const userStr = await AsyncStorage.getItem("user");
 
       if (!userStr) {
-        console.log("No user found in AsyncStorage");
         return;
       }
 
@@ -44,22 +41,29 @@ const SavedFarmsScreen = () => {
 
       const userId = user.uid || user.userId || user.id;
 
-      console.log("Loading saved farms for user:", userId);
-
       if (!userId) {
-        console.log("No user ID found");
         return;
       }
 
       const data = await getSavedFarms(userId);
 
-      console.log("Saved farms:", data);
-
       setFarms(data);
     } catch (error) {
-      console.log("Error loading saved farms:", error);
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Load buyer saved farms",
+          "We couldn't load your saved farms. Please try again."
+        )
+      );
     }
-  }, []);
+  }, [showToast]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadFarms();
+    }, [loadFarms])
+  );
 
   const handleDelete = async () => {
     if (!selectedFarmerId) return;
@@ -85,8 +89,13 @@ const SavedFarmsScreen = () => {
 
       showToast("Farm removed from saved farms");
     } catch (error) {
-      console.log(error);
-      showToast("Failed to remove farm");
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Remove buyer saved farm",
+          "We couldn't remove this farm right now. Please try again."
+        )
+      );
     }
   };
 
@@ -103,9 +112,12 @@ const SavedFarmsScreen = () => {
       </View>
 
       <ScrollView
-        className="px-4"
+        className="flex-1 px-4"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingTop: 16, paddingBottom: 40 }}
+        contentContainerStyle={{
+          paddingTop: 16,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
+        }}
       >
 
         {farms.length === 0 ? (

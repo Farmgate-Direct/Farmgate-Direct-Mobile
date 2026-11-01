@@ -14,6 +14,9 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import { listenChats, markChatRead } from "../../../src/services/chatService";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerTabBarClearance } from "@/src/constants/farmerLayout";
 
 // Turns a Firestore timestamp into milliseconds.
 const toMillis = (value: any) => {
@@ -25,6 +28,7 @@ const toMillis = (value: any) => {
 // Main message list component.
 const Messages = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [chats, setChats] = useState<any[]>([]);
   const [farmerId, setFarmerId] = useState("");
@@ -73,7 +77,7 @@ const Messages = () => {
           }
         );
       } catch (error) {
-        console.error("FARMER MESSAGES LIST ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Load farmer conversations");
         setLoading(false);
       }
     };
@@ -105,7 +109,10 @@ const Messages = () => {
           data={chats}
           keyExtractor={(item) => item.id}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: getFarmerTabBarClearance(insets.bottom),
+          }}
           ListEmptyComponent={
             <View className="items-center mt-20">
               <MaterialCommunityIcons
@@ -130,7 +137,7 @@ const Messages = () => {
               <TouchableOpacity
                 onPress={() => {
                   void markChatRead(item.id, farmerId).catch((error) =>
-                    console.error("MARK FARMER CHAT READ ERROR:", error)
+                    getUserFriendlyErrorMessage(error, "Mark farmer conversation as read")
                   );
                   router.push({
                   pathname: "/farmer/chats/chat",

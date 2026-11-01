@@ -14,15 +14,20 @@ import {
   View,
   Image,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   createChatId,
   listenMessages,
   markChatRead,
   sendMessage,
 } from "../../../src/services/chatService";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const BuyerChatScreen = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { farmerId, farmerName, farmerProfileImage } = useLocalSearchParams();
 
   const [messages, setMessages] = useState<any[]>([]);
@@ -50,12 +55,18 @@ const BuyerChatScreen = () => {
           setMessages(newMessages);
           if (newMessages.length > 0) {
             void markChatRead(id, user.uid).catch((error) =>
-              console.error("MARK OPEN CHAT READ ERROR:", error)
+              getUserFriendlyErrorMessage(error, "Mark buyer chat as read")
             );
           }
         });
       } catch (error) {
-        console.log(error);
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Open buyer chat",
+            "We couldn't open this chat right now. Please try again in a moment."
+          )
+        );
       }
     };
 
@@ -64,19 +75,29 @@ const BuyerChatScreen = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [farmerId]);
+  }, [farmerId, showToast]);
 
 const handleSend = async () => {
     if (!text.trim() || !chatId || !buyerId) return;
 
-    await sendMessage({
-      chatId,
-      senderId: buyerId,
-      receiverId: String(farmerId),
-      text,
-    });
+    try {
+      await sendMessage({
+        chatId,
+        senderId: buyerId,
+        receiverId: String(farmerId),
+        text,
+      });
 
-    setText("");
+      setText("");
+    } catch (error) {
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Send buyer chat message",
+          "Your message couldn't be sent right now. Please try again."
+        )
+      );
+    }
   };
 
   return (
@@ -128,6 +149,17 @@ const handleSend = async () => {
             </View>
           }
           renderItem={({ item }) => {
+            if (item.type === "system") {
+              return (
+                <View className="mb-3 items-center">
+                  <View className="max-w-[90%] rounded-xl bg-gray-200 px-3 py-2">
+                    <Text className="text-center text-xs text-gray-700">
+                      {item.text}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
             const isMe = item.senderId === buyerId;
 
             return (
@@ -170,7 +202,10 @@ const handleSend = async () => {
         />
       </View>
 
-      <View className="bg-white px-3 py-2 mb-5">
+      <View
+        className="bg-white px-3 py-2"
+        style={{ marginBottom: 20 + insets.bottom }}
+      >
         <View className="flex-row items-center bg-gray-100 rounded-full px-2 py-1">
           <TextInput
             placeholder="Type a message..."

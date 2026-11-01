@@ -6,8 +6,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
     useRouter,
 } from "expo-router";
-import { useToast } from "../../../context/ToastContext";
-import { formatPhilippinePhoneNumber } from "../../../utils/validators";
+import { useToast } from "@/src/context/ToastContext";
+import { formatPhilippinePhoneNumber } from "@/src/utils/validators";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 import React, {
     useEffect,
@@ -24,7 +25,7 @@ import {
     ActivityIndicator,
     ScrollView,
 } from "react-native";
-import { useFarmerAlert } from "@/context/FarmerAlertContext";
+import { useFarmerAlert } from "@/src/context/FarmerAlertContext";
 
 import * as ImagePicker
     from "expo-image-picker";
@@ -136,14 +137,19 @@ const AccountSetting = () => {
             try {
                 await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
             } catch (error) {
-                console.error("SYNC PHONE NUMBER TO STORAGE ERROR:", error);
-                showToast("Phone number saved, but local profile sync failed.");
+                getUserFriendlyErrorMessage(error, "Save farmer phone number locally");
+                showToast("Your phone number was saved, but your profile may take a moment to update.");
                 return;
             }
             showToast("Phone number updated.");
         } catch (error) {
-            console.error("UPDATE PHONE NUMBER ERROR:", error);
-            showToast("Failed to update phone number. Please try again.");
+            showToast(
+                getUserFriendlyErrorMessage(
+                    error,
+                    "Update farmer phone number",
+                    "We couldn't update your phone number. Please try again."
+                )
+            );
         } finally {
             setSavingPhone(false);
         }
@@ -253,12 +259,13 @@ const AccountSetting = () => {
                 );
 
             } catch (error) {
-
-                console.log(error);
-
                 Alert.alert(
-                    "Error",
-                    "Failed to upload image"
+                    "Photo not updated",
+                    getUserFriendlyErrorMessage(
+                        error,
+                        "Upload farmer profile photo",
+                        "We couldn't update your photo. Please try another image or try again later."
+                    )
                 );
 
             } finally {
@@ -335,8 +342,11 @@ const AccountSetting = () => {
                 showToast("Password changed successfully.");
 
             } catch (error: unknown) {
-
-                console.log(error);
+                const userMessage = getUserFriendlyErrorMessage(
+                    error,
+                    "Change farmer password",
+                    "We couldn't change your password right now. Please try again."
+                );
 
                 const errorCode =
                     typeof error === "object" && error !== null && "code" in error
@@ -353,11 +363,7 @@ const AccountSetting = () => {
                     return;
                 }
 
-                showToast(
-                    error instanceof Error
-                        ? error.message
-                        : "Failed to change password. Please try again."
-                );
+                showToast(userMessage);
             }
         };
 
@@ -657,7 +663,7 @@ const AccountSetting = () => {
                                     className="ml-3 p-1"
                                 >
                                     <MaterialCommunityIcons
-                                        name={showCurrentPassword ? "eye-off-outline" : "eye-outline"}
+                                        name={showCurrentPassword ? "eye-outline" : "eye-off-outline"}
                                         size={20}
                                         color="#9CA3AF"
                                     />
@@ -691,7 +697,7 @@ const AccountSetting = () => {
                                     className="ml-3 p-1"
                                 >
                                     <MaterialCommunityIcons
-                                        name={showNewPassword ? "eye-off-outline" : "eye-outline"}
+                                        name={showNewPassword ? "eye-outline" : "eye-off-outline"}
                                         size={20}
                                         color="#9CA3AF"
                                     />

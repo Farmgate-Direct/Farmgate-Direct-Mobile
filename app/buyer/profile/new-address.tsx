@@ -19,6 +19,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Dropdown } from "react-native-element-dropdown";
 
@@ -26,16 +27,18 @@ import {
   addAddress,
 } from "@/src/services/addressService";
 
-import { useToast } from "../../../context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
-import { sanitizePhoneInput } from "../../../utils/validators";
+import { sanitizePhoneInput } from "@/src/utils/validators";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 import {
   BULACAN_PROVINCE,
   BULACAN_CITIES,
   barangaysForCity,
   postalCodeForCity,
-} from "@/constants/bulacanBarangays";
+} from "@/src/constants/bulacanBarangays";
 
 // The province is locked to Bulacan. The City and Barangay dropdowns use the
 // local dataset, so their names match the backend exactly, with no fuzzy match.
@@ -45,6 +48,7 @@ const NewAddress = () => {
 
   const router =
     useRouter();
+  const insets = useSafeAreaInsets();
 
   const { showToast } = useToast();
 
@@ -228,13 +232,13 @@ const NewAddress = () => {
         showToast("Address added successfully.");
 
       } catch (error) {
-
-        console.log(
-          "Save address error:",
-          error
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Save buyer address",
+            "We couldn't save your address. Please check your details and try again."
+          )
         );
-
-        showToast("Failed to save address.");
 
       } finally {
 
@@ -318,7 +322,10 @@ const NewAddress = () => {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+        contentContainerStyle={{
+          padding: 20,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
+        }}
         showsVerticalScrollIndicator={false}
       >
 
@@ -428,7 +435,7 @@ const NewAddress = () => {
       />
 
 
-        <View className="flex-row justify-between items-center mb-8 py-2 border-t border-gray-100 pt-6">
+        <View className="flex-row justify-between items-center mb-0 border-t border-gray-100 pt-6 pb-0">
 
           <Text className="text-gray-700 font-medium text-sm">
             Set as Default
@@ -457,7 +464,7 @@ const NewAddress = () => {
           activeOpacity={0.8}
           disabled={loading}
           onPress={handleSubmit}
-          className="rounded-[5px] py-4 items-center"
+          className="mt-6 rounded-[5px] py-4 items-center"
           style={{
             backgroundColor: loading ? "#9ca3af" : "#14532d",
             elevation: loading ? 0 : 4,

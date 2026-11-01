@@ -18,11 +18,12 @@ import { ProductType } from "../../../src/types/product";
 import {
   ProductCategoryKey,
   getUnitsForProduct,
-} from "../../../constants/productCatalog";
+} from "@/src/constants/productCatalog";
 import {
   getProductVideoValidationError,
   MAX_PRODUCT_IMAGES,
-} from "../../../constants/productMedia";
+} from "@/src/constants/productMedia";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 type Props = {
   visible: boolean;
@@ -201,7 +202,11 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
       onClose();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Product media could not be saved."
+        getUserFriendlyErrorMessage(
+          err,
+          "Save farmer product media",
+          "We couldn't save these product changes right now. Please try again in a moment."
+        )
       );
     }
   };
@@ -226,10 +231,10 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
               </Text>
             </View>
             <Text className="mb-4 text-sm leading-5 text-gray-500">
-              Naka-lock ang Product Name at Category (identity ng listing na
-              ito). Ang unit/description/media ay shared sa lahat ng batch.
-              Para sa presyo, stock, status, o freshness ng bawat batch,
-              buksan ang &quot;Batches&quot; ng produkto sa listing.
+              Product Name and Category are locked because they define this listing.
+              The unit, description, and media are shared across all batches. To
+              update the price, stock, status, or freshness of each batch, open the
+              product&apos;s &quot;Batches&quot; section in the listing.
             </Text>
 
             {error ? (
@@ -389,7 +394,10 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
                 onPress={onClose}
                 className="mr-2 flex-1 items-center rounded-[10px] border border-[#14532d] py-3"
               >
-                <Text className="font-semibold text-[#14532d]">Cancel</Text>
+                <View className="items-center justify-center">
+                  <Text className="font-semibold text-[#14532d]">Cancel</Text>
+                  <Text className="text-[10px] text-[#14532d]">(Kanselahin)</Text>
+                </View>
               </TouchableOpacity>
 
               <TouchableOpacity
@@ -404,7 +412,10 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
                 {loading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text className="text-white font-bold">Save</Text>
+                  <View className="items-center justify-center">
+                    <Text className="text-white font-bold">Save</Text>
+                    <Text className="text-[10px] text-white/80">(I-save)</Text>
+                  </View>
                 )}
               </TouchableOpacity>
             </View>

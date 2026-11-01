@@ -48,13 +48,13 @@ const DeleteProductModal = ({ visible, onCancel, onConfirm, loading, product }: 
           </Text>
 
           <Text className="mb-6 text-sm leading-5 text-gray-600">
-            I-a-archive ang{" "}
+            This will archive{" "}
             <Text className="font-bold text-gray-700">
               {product?.name}
             </Text>
-            . Hindi ito makikita sa iyong listing at sa mga buyer, pero
-            mananatili ang lahat ng datos nito (harvest history, orders,
-            reviews). Puwede mo pa itong ma-unarchive sa hinaharap.
+            . It will no longer appear in your listing or to buyers, but all of
+            its data will remain (harvest history, orders, reviews). You can
+            unarchive it later if needed.
           </Text>
 
           <View className="flex-row">
@@ -62,7 +62,10 @@ const DeleteProductModal = ({ visible, onCancel, onConfirm, loading, product }: 
               onPress={onCancel}
               className="mr-2 flex-1 items-center rounded-[10px] border border-gray-300 py-3"
             >
-              <Text className="font-semibold text-gray-700">Cancel</Text>
+              <View className="items-center justify-center">
+                <Text className="font-semibold text-gray-700">Cancel</Text>
+                <Text className="text-[10px] text-gray-500">(Kanselahin)</Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -74,7 +77,10 @@ const DeleteProductModal = ({ visible, onCancel, onConfirm, loading, product }: 
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text className="font-bold text-white">Archive</Text>
+                <View className="items-center justify-center">
+                  <Text className="font-bold text-white">Archive</Text>
+                  <Text className="text-[10px] text-white/80">(I-archive)</Text>
+                </View>
               )}
             </TouchableOpacity>
           </View>

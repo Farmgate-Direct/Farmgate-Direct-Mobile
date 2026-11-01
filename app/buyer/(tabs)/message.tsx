@@ -14,10 +14,13 @@ import {
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import { listenChats } from "../../../src/services/chatService";
-import { useBuyerUnreadChats } from "../../../src/hooks/BuyerUnreadChats";
+import { useBuyerUnreadChats } from "@/src/hooks/useBuyerUnreadChats";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const BuyerMessages = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { unreadChatIds, markRead } = useBuyerUnreadChats();
 
   const [chats, setChats] = useState<any[]>([]);
@@ -60,7 +63,7 @@ const BuyerMessages = () => {
           }
         );
       } catch (error) {
-        console.log(error);
+        getUserFriendlyErrorMessage(error, "Load buyer conversations");
         setLoading(false);
       }
     };
@@ -93,7 +96,10 @@ const BuyerMessages = () => {
         data={chats}
         keyExtractor={(item) => item.id}
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: 20 }}
+        contentContainerStyle={{
+          padding: 16,
+          paddingBottom: 112 + insets.bottom,
+        }}
         ListEmptyComponent={
           <View className="items-center mt-20">
             <MaterialCommunityIcons
@@ -111,7 +117,7 @@ const BuyerMessages = () => {
             <TouchableOpacity
               onPress={() => {
                 void markRead(item.id).catch((error) =>
-                  console.error("MARK BUYER CHAT READ ERROR:", error)
+                  getUserFriendlyErrorMessage(error, "Mark buyer conversation as read")
                 );
                   router.push({
                     pathname: "/buyer/messages/ChatScreen" as any,

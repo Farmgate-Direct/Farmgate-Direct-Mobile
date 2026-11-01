@@ -2,7 +2,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AntDesign, Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   collection,
   doc,
@@ -29,7 +29,9 @@ import { Image } from "expo-image";
 import { LinearGradient } from "expo-linear-gradient";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useEvent } from "expo";
-import { useToast } from "../../../context/ToastContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 import { addToCart } from "@/src/services/cartService";
 import {
   getProductById,
@@ -44,18 +46,16 @@ import {
   formatTrayStock,
   isEggProduct,
   type EggVariant,
-} from "@/constants/productCatalog";
+} from "@/src/constants/productCatalog";
 
 const DARK_GREEN = "#14532d";
 const DESCRIPTION_PREVIEW_LENGTH = 180;
-
-const formatDate = (ts: number) =>
-  new Date(ts).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 export default function ProductDetails() {
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const { showToast } = useToast();
+  const insets = useSafeAreaInsets();
 
   const [product, setProduct] = useState<ProductType | null>(null);
   const [batches, setBatches] = useState<BatchType[]>([]);
@@ -84,12 +84,7 @@ export default function ProductDetails() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const carouselRef = useRef<FlatList>(null);
 
-  useEffect(() => {
-    loadProduct();
-    loadUser();
-  }, []);
-
-  const loadUser = async () => {
+  const loadUser = useCallback(async () => {
     try {
       const data = await AsyncStorage.getItem("user");
       if (!data) return;
@@ -97,11 +92,11 @@ export default function ProductDetails() {
       setBuyerId(user.uid || user.userId || user.id || "");
       setBuyerName(user.fullName || user.name || "");
     } catch (e) {
-      console.log(e);
+      getUserFriendlyErrorMessage(e, "Load buyer product details");
     }
-  };
+  }, []);
 
-  const loadProduct = async () => {
+  const loadProduct = useCallback(async () => {
     try {
       if (!id) return;
       const data = await getProductById(String(id));
@@ -186,11 +181,16 @@ export default function ProductDetails() {
         }
       }
     } catch (e) {
-      console.log(e);
+      getUserFriendlyErrorMessage(e, "Load buyer product reviews");
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    void loadProduct();
+    void loadUser();
+  }, [loadProduct, loadUser]);
 
   // The batches that still have stock and are marked Available, oldest batch
   // number first. This is exactly the order recordSale() uses at checkout.
@@ -406,8 +406,14 @@ export default function ProductDetails() {
       });
       showToast(`${product.name} added to cart!`);
       closeModal();
-    } catch {
-      showToast("Failed to add to cart. Please try again.");
+    } catch (error) {
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Add buyer product to cart",
+          "We couldn't add this item to your cart. Please try again."
+        )
+      );
     }
   };
 
@@ -445,7 +451,10 @@ export default function ProductDetails() {
 
       <ScrollView
           className="flex-1"
-          contentContainerStyle={{ padding: 20, paddingBottom: 120 }}
+          contentContainerStyle={{
+            padding: 20,
+            paddingBottom: 120 + insets.bottom,
+          }}
           showsVerticalScrollIndicator={false}
         >
           {/* Swipeable photo and video gallery, with the video first. */}
@@ -826,7 +835,7 @@ export default function ProductDetails() {
 
       <View
         className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-100"
-        style={{ elevation: 12 }}
+        style={{ elevation: 12, paddingBottom: insets.bottom }}
       >
         <View className="flex-row items-stretch">
           <TouchableOpacity
@@ -1131,25 +1140,6 @@ export default function ProductDetails() {
           </Animated.View>
         )}
       </Modal>
-    </View>
-  );
-}
-
-// Small building blocks reused inside this screen.
-function InfoChip({
-  icon,
-  label,
-  color = "gray",
-}: {
-  icon: string;
-  label: string;
-  color?: "gray" | "green";
-}) {
-  const isGreen = color === "green";
-  return (
-    <View className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full ${isGreen ? "bg-green-50" : "bg-gray-100"}`}>
-      <Ionicons name={icon as any} size={12} color={isGreen ? DARK_GREEN : "#6b7280"} />
-      <Text className={`text-xs font-semibold ${isGreen ? "text-green-900" : "text-gray-600"}`}>{label}</Text>
     </View>
   );
 }

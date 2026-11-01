@@ -1,3 +1,5 @@
+import type { OrderProduct } from "./order";
+
 // The product document, its harvest batches, and its reviews. A product is the
 // stable listing; batches are the dated stock lots a farmer sells from.
 export type ProductCategory =
@@ -99,6 +101,7 @@ export type HarvestRecordType = CreateHarvestRecordInput & {
 // A rating and comment a buyer leaves after an order.
 export type CreateReviewInput = {
   productId: string;
+  orderProduct: OrderProduct;
   batchId: string;
   batchNumber: number;
   harvestRecordId?: string;

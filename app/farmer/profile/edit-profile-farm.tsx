@@ -24,8 +24,11 @@ import {
   ActivityIndicator,
   StatusBar,
 } from "react-native";
-import { useFarmerAlert } from "@/context/FarmerAlertContext";
-import { useToast } from "@/context/ToastContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFarmerAlert } from "@/src/context/FarmerAlertContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 
 import * as ImagePicker from "expo-image-picker";
 
@@ -49,9 +52,10 @@ import {
   BULACAN_PROVINCE,
   BULACAN_CITIES,
   barangaysForCity,
-} from "../../../constants/bulacanBarangays";
+} from "@/src/constants/bulacanBarangays";
 
 const EditProfileFarm = () => {
+  const insets = useSafeAreaInsets();
   const Alert = useFarmerAlert();
   const { showToast } = useToast();
   const [loading, setLoading] =
@@ -112,10 +116,7 @@ const EditProfileFarm = () => {
         }));
       }
     } catch (error) {
-      console.log(
-        "LOAD USER ERROR:",
-        error
-      );
+      getUserFriendlyErrorMessage(error, "Load farmer profile details");
     }
   };
 
@@ -153,10 +154,7 @@ const EditProfileFarm = () => {
         }));
       }
     } catch (error) {
-      console.log(
-        "IMAGE PICK ERROR:",
-        error
-      );
+      getUserFriendlyErrorMessage(error, "Choose farmer cover photo");
     }
   };
 
@@ -260,14 +258,13 @@ const EditProfileFarm = () => {
 
       router.back();
     } catch (error) {
-      console.log(
-        "SAVE USER ERROR:",
-        JSON.stringify(error)
-      );
-
       Alert.alert(
         "Error",
-        String(error)
+        getUserFriendlyErrorMessage(
+          error,
+          "Save farmer farm profile",
+          "We couldn't save your farm details right now. Please try again in a moment."
+        )
       );
     } finally {
       setLoading(false);
@@ -304,9 +301,11 @@ const EditProfileFarm = () => {
         className="flex-1"
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
+        }}
       >
-      <View className="px-5 py-5">
+      <View className="px-5 pt-5">
         <TouchableOpacity
           onPress={pickImage}
           activeOpacity={0.85}
@@ -549,14 +548,14 @@ const EditProfileFarm = () => {
             textAlignVertical="top"
             placeholder="Tell buyers about your farm..."
             placeholderTextColor="#aaa"
-            className="mb-4 h-28 rounded-[10px] border border-gray-200 bg-white px-4 pb-3 pt-3 text-base text-gray-900"
+            className="mb-0 h-28 rounded-[10px] border border-gray-200 bg-white px-4 pb-3 pt-3 text-base text-gray-900"
           />
 
           <TouchableOpacity
             onPress={handleSave}
             disabled={loading}
             activeOpacity={0.85}
-            className="mt-3 flex-row items-center justify-center rounded-[10px] py-3.5"
+            className="mt-10 flex-row items-center justify-center rounded-[10px] py-3.5"
             style={{ backgroundColor: loading ? "#86a991" : "#14532d" }}
           >
             {loading ? (

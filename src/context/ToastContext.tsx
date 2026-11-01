@@ -1,5 +1,12 @@
 // A small centered popup used for quick confirmations on top of the app.
-import React, { createContext, useContext, useRef, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Animated, Text, View } from "react-native";
 
 type ToastContextType = {
@@ -14,27 +21,31 @@ export const ToastProvider = ({ children }: { children: React.ReactNode }) => {
   const opacity = useRef(new Animated.Value(0)).current;
 
   // Fades the popup in, then fades it out and hides it after two seconds.
-  const showToast = (msg: string) => {
-    setMessage(msg);
-    setVisible(true);
+  const showToast = useCallback(
+    (msg: string) => {
+      setMessage(msg);
+      setVisible(true);
 
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration: 200,
-      useNativeDriver: true,
-    }).start();
-
-    setTimeout(() => {
       Animated.timing(opacity, {
-        toValue: 0,
-        duration: 300,
+        toValue: 1,
+        duration: 200,
         useNativeDriver: true,
-      }).start(() => setVisible(false));
-    }, 2000);
-  };
+      }).start();
+
+      setTimeout(() => {
+        Animated.timing(opacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => setVisible(false));
+      }, 2000);
+    },
+    [opacity]
+  );
+  const value = useMemo(() => ({ showToast }), [showToast]);
 
   return (
-    <ToastContext.Provider value={{ showToast }}>
+    <ToastContext.Provider value={value}>
       {children}
 
       {visible && (

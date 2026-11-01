@@ -5,7 +5,6 @@ import { useLocalSearchParams, useRouter, } from "expo-router";
 import React, { useEffect, useRef, useState, } from "react";
 import {
   ActivityIndicator,
-  Alert,
   AppState,
   FlatList,
   Image,
@@ -17,11 +16,14 @@ import {
   View,
   Linking,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { doc, getDoc, onSnapshot, } from "firebase/firestore";
 import { db } from "../../../FirebaseConfig";
 import RateOrderModal from "./RateOrderModal";
 import { cancelOrder, createGcashPayment, syncOrderPayment, } from "../../../src/services/orderService";
-import { useToast } from "@/context/ToastContext";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerScreenBottomPadding } from "@/src/constants/farmerLayout";
 import { OrderType, OrderProduct, } from "@/src/types/order";
 
 // The dark green used across the app.
@@ -40,6 +42,7 @@ export default function OrderDetails() {
 
   const router =
     useRouter();
+  const insets = useSafeAreaInsets();
 
   const { orderId } =
     useLocalSearchParams();
@@ -196,10 +199,7 @@ export default function OrderDetails() {
 
       } catch (error) {
 
-        console.log(
-          "FETCH ORDER ERROR:",
-          error
-        );
+        getUserFriendlyErrorMessage(error, "Load buyer order details");
 
       } finally {
 
@@ -223,7 +223,7 @@ export default function OrderDetails() {
         setLoading(false);
       },
       (error) => {
-        console.log("LISTEN ORDER ERROR:", error);
+        getUserFriendlyErrorMessage(error, "Listen to buyer order updates");
         setLoading(false);
       }
     );
@@ -270,10 +270,7 @@ export default function OrderDetails() {
               }
             })
             .catch((error) => {
-              console.log(
-                "SYNC PAYMENT ERROR:",
-                error
-              );
+              getUserFriendlyErrorMessage(error, "Refresh buyer order payment status");
             });
         }
       );
@@ -281,7 +278,7 @@ export default function OrderDetails() {
     return () => {
       subscription.remove();
     };
-  }, [orderId]);
+  }, [orderId, showToast]);
 
   // Reads the stored buyer so the review can be linked to them.
   useEffect(() => {
@@ -340,10 +337,7 @@ export default function OrderDetails() {
 
         } catch (error) {
 
-          console.log(
-            "LOAD BUYER ERROR:",
-            error
-          );
+          getUserFriendlyErrorMessage(error, "Load buyer order profile");
 
         }
       };
@@ -522,14 +516,12 @@ export default function OrderDetails() {
       showToast("Order cancelled successfully.");
 
     } catch (error: any) {
-      console.log(
-        "CANCEL ORDER ERROR:",
-        error
-      );
-
       showToast(
-        error?.message ||
-          "Something went wrong while cancelling the order."
+        getUserFriendlyErrorMessage(
+          error,
+          "Cancel buyer order",
+          "We couldn't cancel your order right now. Please try again in a moment."
+        )
       );
 
     } finally {
@@ -601,14 +593,12 @@ export default function OrderDetails() {
           "Complete your GCash payment. Return to FarmGate after payment."
         );
       } catch (error: any) {
-        console.log(
-          "GCASH PAYMENT ERROR:",
-          error
-        );
-
         showToast(
-          error?.message ||
-            "Unable to open GCash payment."
+          getUserFriendlyErrorMessage(
+            error,
+            "Start GCash payment",
+            "We couldn't start your GCash payment right now. Please try again in a moment."
+          )
         );
       } finally {
         setPaying(false);
@@ -693,7 +683,7 @@ export default function OrderDetails() {
         }
         contentContainerStyle={{
           paddingTop: 16,
-          paddingBottom: 40,
+          paddingBottom: getFarmerScreenBottomPadding(insets.bottom),
         }}
       >
 
@@ -770,6 +760,13 @@ export default function OrderDetails() {
                 {order.cancelReason ||
                   "No reason provided"}
               </Text>
+
+              {order.autoCancelled && (
+                <Text className="mb-3 rounded-md bg-white px-3 py-2 text-sm text-gray-700">
+                  {order.autoCancellationMessage ||
+                    "This order was automatically cancelled because the farmer did not accept it within 2 days."}
+                </Text>
+              )}
 
               <Text className="text-gray-500 text-xs">
                 Cancelled Date
@@ -904,7 +901,8 @@ export default function OrderDetails() {
               const canRate =
                 (order.status === "delivered" ||
                   order.status === "claimed") &&
-                !item.reviewed;
+                !item.reviewed &&
+                !order.reviewedProductIds?.includes(item.productId);
 
               return (
                 <View className="mb-5">
@@ -978,7 +976,8 @@ export default function OrderDetails() {
 
                   {(order.status === "delivered" ||
                     order.status === "claimed") &&
-                    item.reviewed && (
+                    (item.reviewed ||
+                      order.reviewedProductIds?.includes(item.productId)) && (
 
                     <View className="mt-3 self-start py-2.5 flex-row items-center">
 

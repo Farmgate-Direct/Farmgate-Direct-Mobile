@@ -2,6 +2,21 @@
 // messages, payment results, and system notices.
 export type NotificationKind = "order" | "message" | "payment" | "system";
 
+// A buyer-facing feed item composed from order and chat documents.
+export type BuyerNotification = {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  createdAt: any;
+  orderId?: string;
+  productId?: string;
+  chatId?: string;
+  farmerId?: string;
+  farmerName?: string;
+  farmerProfileImage?: string;
+};
+
 // One notification document. kind decides which of orderId, chatId, or amount
 // is filled in, and createdAt is a Firestore timestamp rather than a number.
 export type NotificationType = {
@@ -11,6 +26,7 @@ export type NotificationType = {
   title: string;
   body: string;
   orderId?: string | null;
+  productId?: string | null;
   chatId?: string | null;
   amount?: number | null;
   read: boolean;

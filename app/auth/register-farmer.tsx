@@ -16,28 +16,38 @@ import {
   StatusBar,
   Image,
 } from "react-native";
-
-import * as ImagePicker
-  from "expo-image-picker";
-
-import { useRouter }
-  from "expo-router";
-
-import AntDesign
-  from "@expo/vector-icons/AntDesign";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import { useRouter } from "expo-router";
+import AntDesign from "@expo/vector-icons/AntDesign";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-
-import { Dropdown }
-  from "react-native-element-dropdown";
-
-import {
-  registerUser,
-} from "../../src/services/authService";
-import { auth } from "../../FirebaseConfig";
+import { Dropdown } from "react-native-element-dropdown";
 import { reload, signOut } from "firebase/auth";
 import { doc, getDoc, getDocFromServer } from "firebase/firestore";
-import { db } from "../../FirebaseConfig";
+import { auth, db } from "../../FirebaseConfig";
+import { registerUser } from "../../src/services/authService";
 import { saveUserToFirestore } from "../../src/services/firestoreService";
+import {
+  resendVerificationByEmail,
+  sendBrandedVerificationEmail,
+} from "../../src/services/emailVerificationService";
+import { checkEmailStatus } from "../../src/services/emailStatusService";
+import { uploadValidIDAsync } from "../../src/services/cloudinaryValidIDService";
+import {
+  sanitizePhoneInput,
+  toE164Phone,
+  validateDetails,
+  validatePasswords,
+  validateFarm,
+  getRegisterErrorMessage,
+} from "@/src/utils/validators";
+import { useToast } from "@/src/context/ToastContext";
+import {
+  BULACAN_PROVINCE,
+  BULACAN_CITIES,
+  barangaysForCity,
+} from "@/src/constants/bulacanBarangays";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const normalizeStatus = (value: unknown) =>
   String(value ?? "").trim().toLowerCase();
@@ -80,29 +90,6 @@ const dialogForExistingStatus = (status: string) => {
   };
 };
 
-import { resendVerificationByEmail, sendBrandedVerificationEmail } from "../../src/services/emailVerificationService";
-import { checkEmailStatus } from "../../src/services/emailStatusService";
-
-import {
-  uploadValidIDAsync,
-} from "../../src/services/cloudinaryValidIDService";
-
-import {
-  sanitizePhoneInput,
-  toE164Phone,
-  validateDetails,
-  validatePasswords,
-  validateFarm,
-  getRegisterErrorMessage,
-} from "../../utils/validators";
-import { useToast } from "../../context/ToastContext";
-
-import {
-  BULACAN_PROVINCE,
-  BULACAN_CITIES,
-  barangaysForCity,
-} from "../../constants/bulacanBarangays";
-
 type InputProps = {
   label: string;
   value: string;
@@ -123,6 +110,7 @@ const RegisterFarmer = () => {
 
   const router =
     useRouter();
+  const insets = useSafeAreaInsets();
   const { showToast } = useToast();
 
   const [step, setStep] =
@@ -160,9 +148,6 @@ const RegisterFarmer = () => {
     municipality,
     setMunicipality,
   ] = useState("");
-
-  const [province, setProvince] =
-    useState("");
 
   const [validID, setValidID] =
     useState<string | null>(null);
@@ -241,11 +226,6 @@ const RegisterFarmer = () => {
     ? barangaysForCity(selectedCity.name).map((name) => ({ name, code: name }))
     : [];
 
-  // The province can only be Bulacan.
-  useEffect(() => {
-    setProvince(BULACAN_PROVINCE);
-  }, []);
-
   // Opens the image picker for the valid ID photo.
   const pickImage = async (
     setter: React.Dispatch<
@@ -316,7 +296,7 @@ const RegisterFarmer = () => {
           showToast("No account found for this email. Please submit registration first.");
           setStep(1);
         } else {
-          showToast("Could not resend. Check your connection and try again.");
+          showToast("We couldn't resend the email. Check your internet connection and try again.");
         }
       } finally {
         submitBusyRef.current = false;
@@ -335,7 +315,13 @@ const RegisterFarmer = () => {
         showToast("A new verification link has been sent. Only the newest link works.");
       }
     } catch (error: any) {
-      showToast(getRegisterErrorMessage(error?.code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Resend farmer verification email",
+          getRegisterErrorMessage(error?.code)
+        )
+      );
     } finally {
       submitBusyRef.current = false;
       setLoading(false);
@@ -461,7 +447,7 @@ const RegisterFarmer = () => {
         return;
       }
     } catch (error: any) {
-      console.error("Email verification check failed:", error);
+      getUserFriendlyErrorMessage(error, "Check farmer email verification");
       // The account is gone from the server because it was rejected, so clear the
       // session and go back to the start so the farmer can register again.
       if (
@@ -477,7 +463,7 @@ const RegisterFarmer = () => {
         setStep(1);
         return;
       }
-      showToast("Could not check email verification. Please try again.");
+      showToast("We couldn't check your email yet. Please try again in a moment.");
       setCheckingEmail(false);
       submitBusyRef.current = false;
       return;
@@ -492,8 +478,13 @@ const RegisterFarmer = () => {
         submitBusyRef.current = false;
         return;
       }
-      console.error("Finalize registration failed:", error);
-      showToast(getRegisterErrorMessage(error?.code));
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Finish farmer registration",
+          getRegisterErrorMessage(error?.code)
+        )
+      );
       // Back to the farm step so a different ID can be picked if needed.
       setStep(3);
     } finally {
@@ -714,8 +705,6 @@ const RegisterFarmer = () => {
         submitBusyRef.current = false;
         setLoading(false);
 
-        console.log("Registration error:", error);
-
         const code = error?.code;
 
         // auth/too-many-requests means Firebase blocked this IP or network, and the
@@ -726,7 +715,13 @@ const RegisterFarmer = () => {
           setSubmitLockedUntil(Date.now() + 180000);
           setFailedSubmits((n) => n + 1);
           setCooldown(60);
-          showToast(getRegisterErrorMessage(code));
+          showToast(
+            getUserFriendlyErrorMessage(
+              error,
+              "Submit farmer registration",
+              getRegisterErrorMessage(code)
+            )
+          );
           return;
         }
 
@@ -755,7 +750,13 @@ const RegisterFarmer = () => {
           setStep(1);
         }
 
-        showToast(getRegisterErrorMessage(code));
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Submit farmer registration",
+            getRegisterErrorMessage(code)
+          )
+        );
       }
     };
 
@@ -800,8 +801,11 @@ const RegisterFarmer = () => {
     <View className="flex-1" style={{ backgroundColor: "#14532d" }}>
       <StatusBar barStyle="light-content" backgroundColor="#14532d" />
       <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
+        contentContainerStyle={{
+          flexGrow: 1,
+        }}
         keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
 
@@ -821,7 +825,10 @@ const RegisterFarmer = () => {
 
       </View>
 
-      <View className="flex-1 bg-white rounded-t-[30px] px-5 pt-5 -mt-5" style={{ flexGrow: 1 }}>
+      <View
+        className="flex-1 bg-white rounded-t-[30px] px-5 pt-5 -mt-5"
+        style={{ flexGrow: 1, paddingBottom: insets.bottom + 12 }}
+      >
         <View className="pt-5 mb-10">
           <StepIndicator />
         </View>
@@ -883,7 +890,7 @@ const RegisterFarmer = () => {
               Open the verification link sent to {email.trim()}, then return here to continue.
             </Text>
             <Text className="text-gray-500 text-xs text-center mt-2 px-4">
-              Only the newest link works — older links show "expired or already used". If you see "already used", just tap "I've verified my email" below.
+              Only the newest link works — older links show &quot;expired or already used&quot;. If you see &quot;already used&quot;, just tap &quot;I&apos;ve verified my email&quot; below.
             </Text>
             <TouchableOpacity
               onPress={handleResendVerification}
@@ -1332,7 +1339,7 @@ const RegisterFarmer = () => {
             </TouchableOpacity>
           </View>
 
-          <Text className="text-center text-gray-500 mt-6">
+          <Text className="text-center text-gray-500 mt-7">
             Already have an account?{" "}
             <Text
               className="font-semibold"
@@ -1510,7 +1517,6 @@ const Input = ({
           </View>
         )}
         <TextInput
-          key={`${label}-${secure && !passwordVisible ? "hidden" : "visible"}`}
           value={value}
           onChangeText={setter}
           secureTextEntry={Boolean(secure && !passwordVisible)}
@@ -1537,7 +1543,7 @@ const Input = ({
             className="px-3 py-2"
           >
             <MaterialCommunityIcons
-              name={passwordVisible ? "eye-off-outline" : "eye-outline"}
+              name={passwordVisible ? "eye-outline" : "eye-off-outline"}
               size={21}
               color="#6b7280"
             />

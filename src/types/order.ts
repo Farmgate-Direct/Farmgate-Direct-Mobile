@@ -113,8 +113,11 @@ export type OrderType = {
   updatedAt?: any;
   inventoryFulfilledAt?: any;
 
-  cancelledBy?: "buyer" | "farmer";
+  cancelledBy?: "buyer" | "farmer" | "system";
   cancelReason?: string;
+  autoCancelled?: boolean;
+  autoCancellationMessage?: string;
+  autoCancelledAt?: any;
 
   commissionRate?: number;
   commissionAmount?: number;
@@ -127,6 +130,7 @@ export type OrderType = {
   farmerWalletPendingCredited?: boolean;
   farmerWalletPendingCreditedAt?: any;
   financialStatus?: "pending" | "settled" | "refunded" | "manual_review";
+  reviewedProductIds?: string[];
 
   codCommissionReserved?: number;
   codCommissionReservationStatus?: CodCommissionReservationStatus;

@@ -13,16 +13,21 @@ import {
   View,
   Image,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   createChatId,
   listenMessages,
   markChatRead,
   sendMessage,
 } from "../../../src/services/chatService";
+import { useToast } from "@/src/context/ToastContext";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 // Main chat thread component.
 const FarmerChat = () => {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const { buyerId, buyerName, buyerProfileImage } = useLocalSearchParams();
 
   const [messages, setMessages] = useState<any[]>([]);
@@ -50,11 +55,17 @@ const FarmerChat = () => {
         unsubscribe = listenMessages(id, (nextMessages) => {
           setMessages(nextMessages);
           markChatRead(id, user.uid).catch((error) =>
-            console.error("MARK FARMER CHAT READ ERROR:", error)
+            getUserFriendlyErrorMessage(error, "Mark farmer chat as read")
           );
         });
       } catch (error) {
-        console.log(error);
+        showToast(
+          getUserFriendlyErrorMessage(
+            error,
+            "Open farmer chat",
+            "We couldn't open this chat right now. Please try again in a moment."
+          )
+        );
       }
     };
 
@@ -63,19 +74,29 @@ const FarmerChat = () => {
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, []);
+  }, [buyerId, showToast]);
 
 const handleSend = async () => {
     if (!text.trim() || !chatId || !farmerId) return;
 
-    await sendMessage({
-      chatId,
-      senderId: farmerId,
-      receiverId: String(buyerId),
-      text,
-    });
+    try {
+      await sendMessage({
+        chatId,
+        senderId: farmerId,
+        receiverId: String(buyerId),
+        text,
+      });
 
-    setText("");
+      setText("");
+    } catch (error) {
+      showToast(
+        getUserFriendlyErrorMessage(
+          error,
+          "Send farmer chat message",
+          "Your message couldn't be sent right now. Please try again."
+        )
+      );
+    }
   };
 
   return (
@@ -130,6 +151,17 @@ const handleSend = async () => {
             </View>
           }
           renderItem={({ item }) => {
+            if (item.type === "system") {
+              return (
+                <View className="mb-3 items-center">
+                  <View className="max-w-[90%] rounded-xl bg-gray-200 px-3 py-2">
+                    <Text className="text-center text-xs text-gray-700">
+                      {item.text}
+                    </Text>
+                  </View>
+                </View>
+              );
+            }
             const isMe = item.senderId === farmerId;
 
             return (
@@ -174,7 +206,10 @@ const handleSend = async () => {
         />
       </View>
 
-      <View className="bg-white px-3 py-2 mb-5">
+      <View
+        className="bg-white px-3 py-2"
+        style={{ marginBottom: 20 + insets.bottom }}
+      >
         <View className="flex-row items-center rounded-full bg-gray-100 px-2 py-1">
           <TextInput
             placeholder="Type a message..."

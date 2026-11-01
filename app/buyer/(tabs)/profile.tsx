@@ -1,7 +1,6 @@
 // Buyer profile menu screen.
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { CommonActions } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 
 import React, {
@@ -23,6 +22,7 @@ import {
 } from "firebase/firestore";
 
 import { db } from "../../../FirebaseConfig";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 const Profile = () => {
 
@@ -79,10 +79,7 @@ const Profile = () => {
 
       } catch (error) {
 
-        console.log(
-          "LOAD USER ERROR:",
-          error
-        );
+        getUserFriendlyErrorMessage(error, "Load buyer profile");
 
       } finally {
 
@@ -104,7 +101,7 @@ const Profile = () => {
       router.replace("/auth/login");
 
     } catch (error) {
-      console.log(error);
+      getUserFriendlyErrorMessage(error, "Sign out buyer");
     }
   };
 

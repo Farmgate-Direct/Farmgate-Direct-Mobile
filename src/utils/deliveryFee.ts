@@ -49,7 +49,7 @@ export type DeliveryQuoteError = {
 };
 
 // Turns a delivery error code into a message the buyer can act on.
-export const deliveryErrorMessage = (code?: string, fallback?: string): string => {
+export const deliveryErrorMessage = (code?: string): string => {
   let base: string;
   switch (code) {
     case "FARM_MISSING_BARANGAY":
@@ -77,15 +77,11 @@ export const deliveryErrorMessage = (code?: string, fallback?: string): string =
       base = "Too many quotes. Wait a moment and tap Try again.";
       break;
     case "FARM_NOT_FOUND":
-      base = "Farm not found.";
+      base = "We couldn't find this farm. Please refresh and try again.";
       break;
     default:
-      base = fallback || "Delivery is not available for this address.";
+      base = "Delivery isn't available right now. Please try again in a moment.";
       break;
-  }
-  // Append the server's own message only when it adds new information.
-  if (fallback && fallback !== base && !base.includes(fallback)) {
-    return `${base} (${fallback})`;
   }
   return base;
 };

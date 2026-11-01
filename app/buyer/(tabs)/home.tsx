@@ -1,5 +1,5 @@
 // Buyer home screen with top products and saved farms.
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -15,9 +15,9 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect, useRouter } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import ProductCard from "@/components/ProductCard";
-import Header_Buyer from "@/components/Header_Buyer";
-import Category_Buyer from "@/components/Category_Filter";
+import ProductCard from "@/src/components/buyer/ProductCard";
+import BuyerHeader from "@/src/components/buyer/BuyerHeader";
+import BuyerCategoryFilter from "@/src/components/buyer/BuyerCategoryFilter";
 import { ProductType } from "@/src/types/product";
 import { OrderType } from "@/src/types/order";
 
@@ -25,7 +25,13 @@ import { subscribeToProducts } from "@/src/services/productService";
 import { getBuyerOrders } from "@/src/services/orderService";
 import { getSavedFarms } from "@/src/services/savedFarmService";
 import { getCartByBuyer } from "@/src/services/cartService";
-import { useBuyerNotifications } from "@/src/hooks/UseBuyerNotification";
+import { useBuyerNotifications } from "@/src/hooks/useBuyerNotifications";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  FARMER_CONTENT_BOTTOM_GAP,
+} from "@/src/constants/farmerLayout";
+import { getBuyerTabBarContentClearance } from "@/src/constants/buyerLayout";
 
 const TOP_SELLING_LIMIT = 10;
 
@@ -40,6 +46,7 @@ type SavedFarm = {
 
 export default function Home() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState<ProductType[]>([]);
@@ -122,7 +129,7 @@ export default function Home() {
       );
       setCartCount(count);
     } catch (error) {
-      console.log("HOME LOAD ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Load buyer home");
     } finally {
       setLoading(false);
     }
@@ -196,9 +203,14 @@ export default function Home() {
 
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{
+          paddingBottom: getBuyerTabBarContentClearance(
+            insets.bottom,
+            FARMER_CONTENT_BOTTOM_GAP
+          ),
+        }}
       >
-        <Header_Buyer
+        <BuyerHeader
           cartCount={cartCount}
           notificationCount={inAppEnabled ? unreadCount : 0}
           onNotificationPress={() => router.push("/buyer/notifications" as any)}
@@ -319,7 +331,7 @@ export default function Home() {
           </View>
         </View>
 
-        <Category_Buyer activeCategory={activeCategory} onSelectCategory={setActiveCategory} />
+        <BuyerCategoryFilter activeCategory={activeCategory} onSelectCategory={setActiveCategory} />
 
         <View className="px-4">
           {/* Active order. */}

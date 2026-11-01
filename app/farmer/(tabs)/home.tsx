@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { db } from "../../../FirebaseConfig";
 import { listenChats } from "../../../src/services/chatService";
 import {
@@ -24,6 +25,9 @@ import { OrderType } from "../../../src/types/order";
 import { BatchType } from "../../../src/types/product";
 import { updateBatch } from "../../../src/services/productService";
 import EditBatchModal from "../../farmer/products/edit-batch";
+import FarmerTutorialVideoModal from "@/src/components/FarmerTutorialVideoModal";
+import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
+import { getFarmerTabBarClearance } from "@/src/constants/farmerLayout";
 
 // Combine sold items by product for totals.
 const peso = (n: number) =>
@@ -97,6 +101,7 @@ const aggregateProducts = (list: OrderType[]): ProductAgg[] => {
 };
 
 const Homepage = () => {
+  const insets = useSafeAreaInsets();
   const [user, setUser] = useState<any>(null);
   const [farmerId, setFarmerId] = useState("");
   const [loading, setLoading] = useState(true);
@@ -113,6 +118,7 @@ const Homepage = () => {
   const [restockUnit, setRestockUnit] = useState("");
   const [restocking, setRestocking] = useState(false);
   const [showRestockModal, setShowRestockModal] = useState(false);
+  const [showDashboardTutorial, setShowDashboardTutorial] = useState(false);
   const [storedNotifs, setStoredNotifs] = useState<NotificationType[]>([]);
   const [lastSeen, setLastSeen] = useState(0);
   const [chats, setChats] = useState<any[]>([]);
@@ -153,7 +159,7 @@ const Homepage = () => {
         setLoading(false);
       },
       (err) => {
-        console.log("HOME ORDERS SNAPSHOT ERROR:", err);
+        getUserFriendlyErrorMessage(err, "Load farmer home orders");
         setLoading(false);
       }
     );
@@ -424,7 +430,7 @@ const Homepage = () => {
       setShowRestockModal(false);
       setRestockBatch(null);
     } catch (error) {
-      console.log("HOME RESTOCK ERROR:", error);
+      getUserFriendlyErrorMessage(error, "Update farmer product stock");
       throw error;
     } finally {
       setRestocking(false);
@@ -469,7 +475,9 @@ const Homepage = () => {
       <ScrollView
         className="flex-1"
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 112 }}
+        contentContainerStyle={{
+          paddingBottom: getFarmerTabBarClearance(insets.bottom),
+        }}
       >
         <View className="bg-green-900 pt-14 pb-4 px-5 rounded-b-2xl">
           <View className="flex-row justify-between items-center">
@@ -481,20 +489,33 @@ const Homepage = () => {
                 {greetingForHour(hour)} {farmerName}
               </Text>
             </View>
-            <TouchableOpacity
-              onPress={handleBellPress}
-              className="w-12 h-12 items-center justify-center"
-              activeOpacity={0.8}
-            >
-              <Ionicons name="notifications-outline" size={24} color="white" />
-              {inAppEnabled && unreadCount > 0 && (
-                <View className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center">
-                  <Text className="text-white text-[11px] font-bold">
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
+            <View className="flex-row items-center">
+              <TouchableOpacity
+                onPress={() => setShowDashboardTutorial(true)}
+                className="mr-1 h-12 w-12 items-center justify-center"
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Open dashboard tutorial"
+              >
+                <Ionicons name="play-circle-outline" size={25} color="white" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBellPress}
+                className="h-12 w-12 items-center justify-center"
+                activeOpacity={0.8}
+                accessibilityRole="button"
+                accessibilityLabel="Open notifications"
+              >
+                <Ionicons name="notifications-outline" size={24} color="white" />
+                {inAppEnabled && unreadCount > 0 && (
+                  <View className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-red-500 items-center justify-center">
+                    <Text className="text-white text-[11px] font-bold">
+                      {unreadCount > 99 ? "99+" : unreadCount}
+                    </Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
@@ -768,6 +789,12 @@ const Homepage = () => {
           }}
           onSave={handleSaveRestock}
           loading={restocking}
+        />
+        <FarmerTutorialVideoModal
+          tutorial="dashboard"
+          title="Dashboard tutorial"
+          visible={showDashboardTutorial}
+          onClose={() => setShowDashboardTutorial(false)}
         />
     </View>
   );
