@@ -1,27 +1,16 @@
 // Every shape an order takes in Firestore, from the buyer's checkout through
 // fulfilment, payment, and the farmer's wallet credit. Optional fields are the
 // ones that only exist once that step has happened.
-import { SaleContribution } from "./product";
-
-// One line item. A single product can be split across harvest batches, so
-// contributions says how many pieces came out of each one.
+// One line item snapshots the selected product variation at purchase time.
 export type OrderProduct = {
   productId: string;
-  batchId: string | null;
-  batchNumber: number | null;
-  harvestRecordId: string | null;
-  contributions: SaleContribution[];
+  variationId: string;
+  variationName: string;
   name: string;
   image: string;
   price: number;
   quantity: number;
   unit: string;
-  // Tray size the buyer chose. price, quantity, and unit are in that tray
-  // size, while baseQuantity is the equivalent in the farmer's listing unit
-  // and is what the backend deducts from stock.
-  eggVariant?: "half" | "full" | null;
-  baseUnit?: string;
-  baseQuantity?: number;
   reviewed?: boolean;
 };
 
@@ -55,7 +44,7 @@ export type OrderStatus =
 export type PaymentMethod = "gcash" | "cod";
 export type PaymentStatus = "pending" | "paid" | "failed" | "cancelled";
 
-// Whether stock was successfully taken out of the seller's batches.
+// Whether stock was successfully taken out of the selected product variations.
 export type FulfillmentStatus =
   | "pending"
   | "fulfilled"

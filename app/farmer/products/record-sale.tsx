@@ -1,6 +1,5 @@
-// Farmer record walk-in sale modal.
 import { Ionicons } from "@expo/vector-icons";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -9,64 +8,56 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ProductType } from "../../../src/types/product";
+import type { ProductType } from "../../../src/types/product";
 import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 
 type Props = {
   visible: boolean;
   onClose: () => void;
   product: ProductType | null;
-  onConfirm: (quantity: number) => Promise<void>;
+  onConfirm: (variationId: string, quantity: number) => Promise<void>;
   loading: boolean;
 };
 
-// Confirmation popup for a sale made directly at the farm.
-// This is for a walk in customer who does not use the app. Recording the sale
-// here is what keeps the stock in the system correct, otherwise the amount in
-// Firestore would drift away from what is really left in the field.
-// It uses the same FIFO logic as recordSale in productService, which the online
-// checkout also uses. Stock is therefore taken automatically from the oldest
-// available batch, together with its harvest record, so the farmer never has to
-// choose which batch to reduce.
-const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Props) => {
+export default function RecordSaleModal({
+  visible,
+  onClose,
+  product,
+  onConfirm,
+  loading,
+}: Props) {
+  const [variationId, setVariationId] = useState("");
   const [quantity, setQuantity] = useState("");
   const [error, setError] = useState("");
+  const variation = product?.variations.find((item) => item.id === variationId);
 
-  const handleQuantityChange = (text: string) => {
-    if (/^\d*$/.test(text)) setQuantity(text);
-  };
-
-  const resetForm = () => {
+  useEffect(() => {
+    setVariationId(product?.variations[0]?.id || "");
     setQuantity("");
     setError("");
-  };
+  }, [product, visible]);
 
-// Checks the quantity and then records the sale.
-  const handleConfirm = async () => {
-    const qty = Number(quantity);
-
-    if (!quantity || qty <= 0) {
-      setError("Please enter a valid quantity.");
+  const submit = async () => {
+    const amount = Number(quantity);
+    if (!variation || !Number.isFinite(amount) || amount <= 0) {
+      setError("Choose a variation and enter a valid quantity.");
       return;
     }
-
-    if (product && qty > product.stock) {
-      setError(
-        `This exceeds the current available stock (${product.stock} ${product.unit}).`
-      );
+    if (amount > variation.stock) {
+      setError(`Only ${variation.stock} ${variation.unit} is available.`);
       return;
     }
-
-    setError("");
     try {
-      await onConfirm(qty);
-      resetForm();
-    } catch (error) {
+      setError("");
+      await onConfirm(variation.id, amount);
+      setQuantity("");
+      onClose();
+    } catch (submitError) {
       setError(
         getUserFriendlyErrorMessage(
-          error,
+          submitError,
           "Record farmer walk-in sale",
-          "We couldn't record this sale right now. Please try again in a moment."
+          "We couldn't record this sale. Please try again."
         )
       );
     }
@@ -80,83 +71,61 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
       transparent
       animationType="fade"
       statusBarTranslucent
-      onRequestClose={() => {
-        resetForm();
-        onClose();
-      }}
+      onRequestClose={onClose}
     >
       <View className="flex-1 justify-center bg-black/40 px-6">
-        <View className="rounded-[10px] bg-white p-5">
+        <View className="rounded-xl bg-white p-5">
           <View className="mb-3 flex-row items-center">
-            <View className="mr-3 h-10 w-10 items-center justify-center rounded-[10px] bg-green-50">
-              <Ionicons name="storefront-outline" size={21} color="#14532d" />
-            </View>
-            <Text className="flex-1 text-lg font-bold text-gray-900">
+            <Ionicons name="storefront-outline" size={22} color="#14532d" />
+            <Text className="ml-2 flex-1 text-lg font-bold text-gray-900">
               Record walk-in sale
             </Text>
           </View>
-          <Text className="mb-4 text-sm leading-5 text-gray-500">
-            For products sold directly at the farm without using the app. Stock is
-            automatically reduced using FIFO (oldest batch first), the same logic used
-            for online orders.
-          </Text>
-
-          <View className="mb-4 rounded-[10px] bg-gray-50 px-4 py-3">
-            <Text className="text-sm font-semibold text-gray-800">
-              {product.name}
-            </Text>
-            <Text className="mt-1 text-sm text-gray-500">
-              {product.stock} {product.unit} available
-            </Text>
+          <Text className="mb-3 text-sm text-gray-500">{product.name}</Text>
+          <View className="mb-3 flex-row flex-wrap gap-2">
+            {product.variations.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                onPress={() => setVariationId(item.id)}
+                className={`rounded-lg border px-3 py-2 ${
+                  variationId === item.id
+                    ? "border-green-900 bg-green-50"
+                    : "border-gray-200"
+                }`}
+              >
+                <Text className="text-sm text-gray-800">{item.name}</Text>
+                <Text className="text-xs text-gray-500">
+                  {item.stock} {item.unit}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
-
-          {error ? (
-            <View className="mb-3 rounded-[10px] border border-red-100 bg-red-50 px-3 py-2">
-              <Text className="text-sm text-red-600">{error}</Text>
-            </View>
-          ) : null}
-
-          <Text className="mb-1 text-xs font-semibold text-gray-600">
-            SOLD QUANTITY ({product.unit})
-          </Text>
           <TextInput
             value={quantity}
-            onChangeText={handleQuantityChange}
-            keyboardType="numeric"
-            placeholder={`Enter quantity (${product.unit})`}
-            placeholderTextColor="#9ca3af"
-            className="mb-5 rounded-[10px] border border-gray-300 bg-gray-50 px-4 py-3 text-gray-800"
+            onChangeText={(value) => {
+              if (/^\d*\.?\d*$/.test(value)) setQuantity(value);
+            }}
+            keyboardType="decimal-pad"
+            placeholder={`Quantity (${variation?.unit || "unit"})`}
+            className="mb-3 rounded-lg border border-gray-300 px-3 py-3"
           />
-
-          <View className="flex-row">
+          {error ? <Text className="mb-3 text-sm text-red-600">{error}</Text> : null}
+          <View className="flex-row gap-2">
             <TouchableOpacity
-              onPress={() => {
-                resetForm();
-                onClose();
-              }}
-              className="mr-2 flex-1 items-center rounded-[10px] border border-[#14532d] py-3"
+              onPress={onClose}
+              className="flex-1 items-center rounded-lg border border-green-900 py-3"
             >
-              <View className="items-center justify-center">
-                <Text className="font-semibold text-[#14532d]">Cancel</Text>
-                <Text className="text-[10px] text-[#14532d]">(Kanselahin)</Text>
-              </View>
+              <Text className="font-semibold text-green-900">Cancel</Text>
             </TouchableOpacity>
-
             <TouchableOpacity
-              onPress={handleConfirm}
+              onPress={submit}
               disabled={loading}
-              className="ml-2 flex-1 items-center rounded-[10px] py-3"
-              style={{
-                backgroundColor: loading ? "#9ca3af" : "#14532d",
-              }}
+              className="flex-1 items-center rounded-lg bg-green-900 py-3"
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color="white" />
               ) : (
-                <View className="items-center justify-center">
-                  <Text className="text-white font-bold">Record Sale</Text>
-                  <Text className="text-[10px] text-white/80">(Itala ang Benta)</Text>
-                </View>
+                <Text className="font-bold text-white">Record sale</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -164,6 +133,4 @@ const RecordSaleModal = ({ visible, onClose, product, onConfirm, loading }: Prop
       </View>
     </Modal>
   );
-};
-
-export default RecordSaleModal;
+}

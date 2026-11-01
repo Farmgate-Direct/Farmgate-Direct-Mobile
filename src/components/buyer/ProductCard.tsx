@@ -22,8 +22,18 @@ export default function ProductCard({
 }: Props) {
   const router = useRouter();
 
-  const stock = item.stock || 0;
+  const availableVariations = (item.variations || []).filter(
+    (variation) => variation.status === "Available" && variation.stock > 0
+  );
+  const stock = availableVariations.reduce(
+    (total, variation) => total + variation.stock,
+    0
+  );
   const outOfStock = stock <= 0;
+  const prices = availableVariations.map((variation) => variation.price);
+  const minPrice = prices.length ? Math.min(...prices) : Number(item.price || 0);
+  const maxPrice = prices.length ? Math.max(...prices) : minPrice;
+  const variationCount = availableVariations.length;
   const hasRating = (item.totalReviews || 0) > 0;
 
   return (
@@ -94,9 +104,15 @@ export default function ProductCard({
 
         <View className="items-end justify-start pt-0.5">
           <Text className="text-green-900 font-black text-xs">
-            ₱{Number(item.price).toFixed(2)}
+            {variationCount > 1 ? "From " : ""}
+            ₱{minPrice.toFixed(2)}
+            {variationCount > 1 && maxPrice !== minPrice
+              ? `–₱${maxPrice.toFixed(2)}`
+              : ""}
           </Text>
-          <Text className="text-gray-400 text-[9px] mt-0.5">/{item.unit}</Text>
+          <Text className="text-gray-400 text-[9px] mt-0.5">
+            {variationCount > 1 ? `${variationCount} options` : `/${item.unit}`}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>

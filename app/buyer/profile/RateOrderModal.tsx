@@ -29,9 +29,7 @@ type Props = {
   onSubmitted: (productId: string) => void;
 };
 
-// Rating popup shown when the buyer taps Rate on a delivered order. The review
-// is linked to the order, to the batch, and, when available, to the specific
-// harvest record the product came from, so a complaint can be traced back later.
+// Rating popup shown when the buyer taps Rate on a delivered order.
 const RateOrderModal = ({
   visible,
   onClose,
@@ -74,9 +72,8 @@ const RateOrderModal = ({
       await addReview({
         productId: product.productId,
         orderProduct: product,
-        batchId: product.batchId || "",
-        batchNumber: product.batchNumber ?? 0,
-        harvestRecordId: product.harvestRecordId || undefined,
+        variationId: product.variationId || null,
+        variationName: product.variationName || "",
         orderId,
         buyerId,
         buyerName,

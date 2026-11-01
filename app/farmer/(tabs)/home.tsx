@@ -22,9 +22,6 @@ import {
 } from "../../../src/services/notificationService";
 import { NotificationType } from "../../../src/types/notification";
 import { OrderType } from "../../../src/types/order";
-import { BatchType } from "../../../src/types/product";
-import { updateBatch } from "../../../src/services/productService";
-import EditBatchModal from "../../farmer/products/edit-batch";
 import FarmerTutorialVideoModal from "@/src/components/FarmerTutorialVideoModal";
 import { getUserFriendlyErrorMessage } from "@/src/utils/userFacingError";
 import { getFarmerTabBarClearance } from "@/src/constants/farmerLayout";
@@ -109,15 +106,6 @@ const Homepage = () => {
   const [orders, setOrders] = useState<OrderType[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [productsCount, setProductsCount] = useState(0);
-  const [batchInfo, setBatchInfo] = useState<{
-    sellable: Record<string, number>;
-    has: Record<string, boolean>;
-    latestBatch: Record<string, BatchType>;
-  }>({ sellable: {}, has: {}, latestBatch: {} });
-  const [restockBatch, setRestockBatch] = useState<BatchType | null>(null);
-  const [restockUnit, setRestockUnit] = useState("");
-  const [restocking, setRestocking] = useState(false);
-  const [showRestockModal, setShowRestockModal] = useState(false);
   const [showDashboardTutorial, setShowDashboardTutorial] = useState(false);
   const [storedNotifs, setStoredNotifs] = useState<NotificationType[]>([]);
   const [lastSeen, setLastSeen] = useState(0);
@@ -166,7 +154,7 @@ const Homepage = () => {
     return () => unsub();
   }, [farmerId]);
 
-  // Watch products and batches in real time.
+  // Watch product listings in real time.
   useEffect(() => {
     if (!farmerId) return;
     const pq = query(
@@ -181,42 +169,7 @@ const Homepage = () => {
       setProductsCount(sellable.length);
     });
 
-    const bq = query(
-      collection(db, "productBatches"),
-      where("farmerId", "==", farmerId)
-    );
-    const unsubBatches = onSnapshot(
-      bq,
-      (bsnap) => {
-        const sellable: Record<string, number> = {};
-        const has: Record<string, boolean> = {};
-        const latestBatch: Record<string, BatchType> = {};
-        bsnap.docs.forEach((d) => {
-          const b = { docId: d.id, ...d.data() } as BatchType;
-          if (b?.archived === true) return;
-          const pid = String(b?.productId || "");
-          if (!pid) return;
-          has[pid] = true;
-          if (
-            !latestBatch[pid] ||
-            b.batchNumber > latestBatch[pid].batchNumber
-          ) {
-            latestBatch[pid] = b;
-          }
-          // Only available, non-archived batches count as sellable.
-          if (b?.status === "Available") {
-            sellable[pid] = (sellable[pid] || 0) + Number(b?.stock || 0);
-          }
-        });
-        setBatchInfo({ sellable, has, latestBatch });
-      },
-      () => {}
-    );
-
-    return () => {
-      unsubProducts();
-      unsubBatches();
-    };
+    return () => unsubProducts();
   }, [farmerId]);
 
   // Watch stored notifications for the badge count.
@@ -308,40 +261,31 @@ const Homepage = () => {
     [completedOrders]
   );
 
-  // Base low stock on sellable batch totals per product.
   const lowStock = useMemo(() => {
     return [...products]
-      .map((p: any) => {
-        const pid = String(p?.docId || "");
-        const eff =
-          pid && batchInfo.has[pid]
-            ? Number(batchInfo.sellable[pid] || 0)
-            : Number(p?.stock ?? 0);
-        return { product: p, eff };
-      })
-      .filter(({ eff }) => eff > 0 && eff <= LOW_STOCK_THRESHOLD)
+      .flatMap((product: any) =>
+        (product?.variations || [])
+          .filter(
+            (variation: any) =>
+              Number(variation?.stock || 0) > 0 &&
+              Number(variation.stock) <= LOW_STOCK_THRESHOLD
+          )
+          .map((variation: any) => ({
+            product,
+            variation,
+            eff: Number(variation.stock),
+          }))
+      )
       .sort((a, b) => a.eff - b.eff)
       .slice(0, 5);
-  }, [products, batchInfo]);
+  }, [products]);
 
-  // Base stock on sellable batches per product.
   const displayOutOfStock = useMemo(() => {
-    let count = 0;
-    products.forEach((p: any) => {
-      const pid = String(p?.docId || "");
-      const status = String(p?.status ?? "");
-      if (status === "Out of Stock") {
-        count += 1;
-        return;
-      }
-      if (pid && batchInfo.has[pid]) {
-        if (Number(batchInfo.sellable[pid] || 0) <= 0) count += 1;
-      } else if (Number(p?.stock ?? 0) <= 0) {
-        count += 1;
-      }
-    });
-    return count;
-  }, [products, batchInfo]);
+    return products.filter(
+      (product: any) =>
+        product?.archived !== true && Number(product?.stock || 0) <= 0
+    ).length;
+  }, [products]);
 
   const unreadCount = useMemo(() => {
     const storedUnread = storedNotifs.filter((n) => !n.read).length;
@@ -399,42 +343,6 @@ const Homepage = () => {
       pathname: "/farmer/(tabs)/order",
       params: { filter: "pending" },
     });
-  };
-
-  const handleRestock = (product: any) => {
-    const batch = batchInfo.latestBatch[String(product?.docId || "")];
-    if (!batch) {
-      router.push({
-        pathname: "/farmer/products/[id]",
-        params: { id: String(product?.docId || "") },
-      });
-      return;
-    }
-
-    setRestockBatch(batch);
-    setRestockUnit(String(product?.unit || ""));
-    setShowRestockModal(true);
-  };
-
-  const handleSaveRestock = async (
-    batchDocId: string,
-    updates: {
-      price: number;
-      status: string;
-      restockQuantity: number;
-    }
-  ) => {
-    setRestocking(true);
-    try {
-      await updateBatch(batchDocId, updates);
-      setShowRestockModal(false);
-      setRestockBatch(null);
-    } catch (error) {
-      getUserFriendlyErrorMessage(error, "Update farmer product stock");
-      throw error;
-    } finally {
-      setRestocking(false);
-    }
   };
 
   const renderThumb = (image: string, name: string, size = 44) => {
@@ -748,9 +656,9 @@ const Homepage = () => {
                 No low stock alerts. All good!
               </Text>
             ) : (
-              lowStock.slice(0, 5).map(({ product: p, eff }: any) => (
+              lowStock.slice(0, 5).map(({ product: p, variation, eff }: any) => (
                 <View
-                  key={p.docId || p.name}
+                  key={`${p.docId || p.name}-${variation.id}`}
                   className="flex-row items-center py-3"
                 >
                   {renderThumb(p?.image || "", p?.name || "", 40)}
@@ -758,18 +666,23 @@ const Homepage = () => {
                     className="flex-1 font-medium text-gray-800 text-[14px] ml-3"
                     numberOfLines={1}
                   >
-                    {p?.name || "Product"}
+                    {p?.name || "Product"} · {variation.name}
                   </Text>
                   <Text className="text-gray-500 text-[12px]">
-                    {eff} {unitLabel(p?.unit)} left
+                    {eff} {unitLabel(variation.unit)} left
                   </Text>
                   <TouchableOpacity
-                    onPress={() => handleRestock(p)}
+                    onPress={() =>
+                      router.push({
+                        pathname: "/farmer/products/[id]",
+                        params: { id: String(p?.docId || "") },
+                      })
+                    }
                     className="rounded-full px-4 py-1.5 ml-3"
                     activeOpacity={0.8}
                   >
                     <Text className="text-[#14532d] text-[12px] font-semibold">
-                      Restock
+                      Manage
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -779,17 +692,6 @@ const Homepage = () => {
         </View>
         </ScrollView>
 
-        <EditBatchModal
-          visible={showRestockModal}
-          batch={restockBatch}
-          unit={restockUnit}
-          onClose={() => {
-            setShowRestockModal(false);
-            setRestockBatch(null);
-          }}
-          onSave={handleSaveRestock}
-          loading={restocking}
-        />
         <FarmerTutorialVideoModal
           tutorial="dashboard"
           title="Dashboard tutorial"

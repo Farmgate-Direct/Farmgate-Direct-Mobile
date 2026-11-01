@@ -53,10 +53,6 @@ import {
 } from "@/src/services/cartService";
 
 import {
-  normalizeEggVariant,
-  eggVariantToBaseQuantity,
-} from "@/src/constants/productCatalog";
-import {
   FARMER_CONTENT_BOTTOM_GAP,
   getFarmerScreenBottomPadding,
 } from "@/src/constants/farmerLayout";
@@ -674,14 +670,6 @@ export default function Checkout() {
           const products =
             farm.products.map(
               (p: any) => {
-                // Egg tray size chosen by the buyer. Price, quantity, and unit are in that tray
-                // size, while baseQuantity is the equivalent in the farmer's
-                // listing unit and is what the backend deducts from stock. It is
-                // recomputed here instead of trusting what the cart stored.
-                const eggV = normalizeEggVariant(p.eggVariant);
-                const baseU = p.baseUnit || p.unit || "";
-                const qty = Number(p.quantity || 0);
-
                 return {
                 productId:
                   String(
@@ -690,17 +678,11 @@ export default function Checkout() {
                     ""
                   ),
 
-                batchId:
-                  null,
+                variationId:
+                  String(p.variationId || ""),
 
-                batchNumber:
-                  null,
-
-                harvestRecordId:
-                  null,
-
-                contributions:
-                  [],
+                variationName:
+                  String(p.variationName || ""),
 
                 name:
                   p.name ||
@@ -717,22 +699,11 @@ export default function Checkout() {
                   ),
 
                 quantity:
-                  qty,
+                  Number(p.quantity || 0),
 
                 unit:
                   p.unit ||
                   "",
-
-                eggVariant:
-                  eggV,
-
-                baseUnit:
-                  baseU,
-
-                baseQuantity:
-                  eggV
-                    ? eggVariantToBaseQuantity(eggV, qty, baseU)
-                    : qty,
 
                 reviewed:
                   false,
@@ -1125,16 +1096,12 @@ export default function Checkout() {
                         </Text>
 
                         <Text className="text-gray-500 text-xs mt-0.5">
+                          {p.variationName ? `${p.variationName} · ` : ""}
                           Qty:{" "}
                           {
                             p.quantity
                           }
                           {p.unit ? ` ${String(p.unit).replace(/^per\s+/i, "")}` : ""}
-                          {normalizeEggVariant(p.eggVariant) === "half"
-                            ? " (15 pcs)"
-                            : normalizeEggVariant(p.eggVariant) === "full"
-                              ? " (30 pcs)"
-                              : ""}
                         </Text>
                       </View>
 

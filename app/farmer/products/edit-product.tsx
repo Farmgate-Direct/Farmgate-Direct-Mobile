@@ -15,10 +15,7 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { ProductType } from "../../../src/types/product";
-import {
-  ProductCategoryKey,
-  getUnitsForProduct,
-} from "@/src/constants/productCatalog";
+import { ProductCategoryKey } from "@/src/constants/productCatalog";
 import {
   getProductVideoValidationError,
   MAX_PRODUCT_IMAGES,
@@ -33,64 +30,10 @@ type Props = {
   loading: boolean;
 };
 
-type DropdownProps = {
-  label: string;
-  value: string;
-  options: string[];
-  onSelect: (value: string) => void;
-};
-
-// The unit options come from the same helper as Add Product, so the two stay
-// in sync. Egg & Poultry only offers half tray and per tray, never per piece or
-// per kilo, and every other category only offers per kilo.
-const getUnits = (product: ProductType) =>
-  getUnitsForProduct(
-    (product.category as ProductCategoryKey) || "Vegetables",
-    product.name
-  );
-
-const Dropdown = ({ label, value, options, onSelect }: DropdownProps) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <View className="mb-4">
-      <Text className="text-xs text-gray-500 mb-1">{label}</Text>
-      <TouchableOpacity
-        onPress={() => setOpen(!open)}
-        className="flex-row items-center justify-between rounded-[10px] border border-gray-300 bg-gray-100 px-4 py-3"
-      >
-        <Text>{value}</Text>
-        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} />
-      </TouchableOpacity>
-
-      {open && (
-        <View className="mt-1 overflow-hidden rounded-[10px] border border-gray-300 bg-white">
-          {options.map((opt) => (
-            <TouchableOpacity
-              key={opt}
-              onPress={() => {
-                onSelect(opt);
-                setOpen(false);
-              }}
-              className={`px-4 py-3 ${opt === value ? "bg-[#14532d]" : "bg-white"}`}
-            >
-              <Text className={opt === value ? "text-white" : "text-black"}>{opt}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </View>
-  );
-};
-
-// Edits only the master information of a product. The name, category, unit,
-// description, and media are shared by all of its batches, so this is the only
-// place they can be changed. Price, stock, status, and freshness belong to each
-// batch and are edited under the product's Batches section, which is in
-// edit-batch.tsx.
+// Edits the listing's shared name, category, description, and media.
 const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props) => {
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ProductCategoryKey>("Vegetables");
-  const [unit, setUnit] = useState("per kg");
   const [description, setDescription] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [imagePublicIds, setImagePublicIds] = useState<string[]>([]);
@@ -110,7 +53,6 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
     if (product) {
       setName(product.name || "");
       setCategory((product.category as ProductCategoryKey) || "Vegetables");
-      setUnit(product.unit || "per kg");
       setDescription(product.description || "");
       setImages(
         product.images?.length
@@ -134,7 +76,6 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
   const isFormValid =
     name.trim() !== "" &&
     category.trim() !== "" &&
-    unit.trim() !== "" &&
     description.trim() !== "" &&
     (images.length > 0 || video !== "");
 
@@ -190,7 +131,6 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
         ...product,
         name,
         category,
-        unit,
         description,
         image: images[0] || "",
         images,
@@ -231,10 +171,8 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
               </Text>
             </View>
             <Text className="mb-4 text-sm leading-5 text-gray-500">
-              Product Name and Category are locked because they define this listing.
-              The unit, description, and media are shared across all batches. To
-              update the price, stock, status, or freshness of each batch, open the
-              product&apos;s &quot;Batches&quot; section in the listing.
+              Product name and category are locked. Manage each variation&apos;s
+              price, unit, stock, and description from the product listing.
             </Text>
 
             {error ? (
@@ -262,13 +200,6 @@ const EditProductModal = ({ visible, onClose, product, onSave, loading }: Props)
                 <Ionicons name="lock-closed" size={14} color="#9ca3af" />
               </View>
             </View>
-
-            <Dropdown
-              label="UNIT"
-              value={unit}
-              options={getUnits(product)}
-              onSelect={setUnit}
-            />
 
             <Text className="text-xs text-gray-500 mb-1">DESCRIPTION</Text>
             <TextInput
